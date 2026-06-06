@@ -1,0 +1,330 @@
+/* --- DESIGN GLOBAL & POLICE --- */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+body {
+    background-color: #f4f6f9;
+    color: #333;
+    padding: 15px;
+    width: 100%;
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+h1 {
+    text-align: center;
+    color: #2c3e50;
+    margin-bottom: 20px;
+    font-size: 26px;
+}
+
+h2 {
+    color: #2c3e50;
+    font-size: 18px;
+    margin-bottom: 15px;
+    border-bottom: 2px solid #ddd;
+    padding-bottom: 5px;
+}
+
+h3 {
+    color: #7f8c8d;
+    font-size: 16px;
+    margin-bottom: 5px;
+}
+
+hr {
+    border: 0;
+    height: 1px;
+    background: #ddd;
+    margin: 25px 0;
+}
+
+/* --- STYLE DU FORMULAIRE --- */
+#formulaire {
+    background: white;
+    padding: 20px;
+    border-radius: 12px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+/* Alignement de l'input nom et du micro */
+.champ-vocal {
+    display: flex;
+    gap: 8px;
+    width: 100%;
+}
+
+.champ-vocal input {
+    flex: 1;
+    min-width: 0;
+}
+
+#formulaire input, #formulaire select {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    font-size: 16px;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+#formulaire input:focus, #formulaire select:focus {
+    border-color: #3498db;
+}
+
+/* Bouton Micro 🎙️ */
+#btn-micro {
+    width: 55px;
+    flex: 0 0 55px;
+    background-color: #2ecc71;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 20px;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.1s;
+}
+
+#btn-micro:active {
+    transform: scale(0.95);
+}
+
+/* Bouton Enregistrer */
+#btn-ajouter {
+    background-color: #3498db;
+    color: white;
+    border: none;
+    padding: 14px;
+    font-size: 16px;
+    font-weight: bold;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+#btn-ajouter:hover {
+    background-color: #2980b9;
+}
+
+/* --- ZONE AUDIO GLOBALE --- */
+.zone-audio-globale {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+#btn-lire-tout,
+#btn-effacer-regles {
+    background-color: #9b59b6;
+    color: white;
+    border: none;
+    padding: 12px 18px;
+    font-size: 16px;
+    font-weight: bold;
+    border-radius: 8px;
+    cursor: pointer;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    transition: background 0.2s;
+}
+
+#btn-lire-tout:hover {
+    background-color: #8e44ad;
+}
+
+#btn-effacer-regles {
+    background-color: #5d6d7e;
+}
+
+#btn-effacer-regles:hover {
+    background-color: #4d5b6a;
+}
+
+/* --- RÉSUMÉ --- */
+#resume {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+#resume div {
+    background: white;
+    border-radius: 8px;
+    padding: 14px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+}
+
+#resume span {
+    display: block;
+    color: #6b7280;
+    font-size: 13px;
+    margin-bottom: 6px;
+}
+
+#resume strong {
+    color: #2c3e50;
+    font-size: 20px;
+}
+
+#resume .positif {
+    color: #1f8f55;
+}
+
+#resume .negatif {
+    color: #c0392b;
+}
+
+/* --- CONFIGURATION DES COLONNES (RESPONSIVE) --- */
+#listes-container {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+@media (min-width: 600px) {
+    #resume {
+        grid-template-columns: repeat(3, 1fr);
+    }
+
+    #listes-container {
+        flex-direction: row;
+    }
+
+    .colonne {
+        flex: 1;
+    }
+}
+
+.colonne {
+    background: white;
+    padding: 20px;
+    border-radius: 12px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+}
+
+/* --- DESIGN DES LIGNES (li) --- */
+ul {
+    list-style: none;
+}
+
+ul li {
+    background: #f8fafc;
+    padding: 12px;
+    border-radius: 6px;
+    margin-bottom: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    border-left: 5px solid #3498db; /* Bordure bleue pour les Crédits */
+    font-size: 15px;
+    word-break: break-word;
+}
+
+/* Changement de couleur pour la liste monnaie */
+#affichage-monnaies li {
+    border-left-color: #e67e22; /* Bordure orange pour les Monnaies */
+}
+
+/* Textes barrés quand c'est validé */
+del {
+    color: #95a5a6;
+    text-decoration: line-through;
+}
+
+.operation.reglee {
+    opacity: 0.78;
+}
+
+.operation.reglee .operation-client,
+.operation.reglee strong {
+    color: #7f8c8d;
+    text-decoration: line-through;
+}
+
+.operation-details {
+    display: grid;
+    gap: 4px;
+    min-width: 0;
+}
+
+.operation-client {
+    font-weight: 700;
+    color: #2c3e50;
+}
+
+.operation-statut {
+    color: #64748b;
+    font-size: 12px;
+}
+
+.operation-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 6px;
+    flex: 0 0 auto;
+}
+
+.etat-vide {
+    color: #64748b;
+    font-style: italic;
+    border-left-color: #cbd5e1;
+}
+
+ul li button {
+    color: white;
+    border: none;
+    padding: 6px 12px;
+    font-size: 13px;
+    font-weight: bold;
+    border-radius: 5px;
+    cursor: pointer;
+}
+
+.btn-regler {
+    background-color: #1f8f55;
+}
+
+.btn-secondaire {
+    background-color: #5d6d7e;
+}
+
+.btn-supprimer {
+    background-color: #c0392b;
+}
+
+@media (max-width: 420px) {
+    body {
+        padding: 10px;
+        overflow-x: hidden;
+    }
+
+    #btn-lire-tout,
+    #btn-effacer-regles {
+        width: 100%;
+    }
+
+    ul li {
+        flex-direction: column;
+    }
+
+    .operation-actions {
+        width: 100%;
+        justify-content: stretch;
+    }
+
+    .operation-actions button {
+        flex: 1;
+    }
+}

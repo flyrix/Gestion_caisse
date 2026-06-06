@@ -1,0 +1,99 @@
+name: Build TWA APK
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: '11'
+
+      - name: Setup Android SDK
+        uses: r0adkll/setup-android@v2
+        with:
+          api-levels: '31'
+          components: 'platform-tools,build-tools;33.0.2'
+
+      - name: Install Bubblewrap
+        run: npm install -g @bubblewrap/cli
+
+      - name: Restore keystore from secret
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 --decode > release-keystore.jks
+            ls -l release-keystore.jks
+          else
+            echo "No keystore provided; build will run in debug mode if script allows."
+          fi
+
+      - name: Run build script
+        env:
+          MANIFEST_URL: ${{ secrets.MANIFEST_URL }}
+          PACKAGE_ID: ${{ secrets.PACKAGE_ID }}
+        run: |
+          chmod +x ./scripts/build_twa.sh
+          if [ -f release-keystore.jks ]; then
+            ./scripts/build_twa.sh "$MANIFEST_URL" "$PACKAGE_ID" release-keystore.jks
+          else
+            ./scripts/build_twa.sh "$MANIFEST_URL" "$PACKAGE_ID"
+          fi
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: twa-output
+          path: |
+            ./output/**
+            ./build/**
+
+      - name: Find built APK
+        id: find_apk
+        run: |
+          APK=$(find output build -type f -name "*.apk" | head -n1 || true)
+          if [ -z "$APK" ]; then
+            echo "No APK found"
+            echo "APK_PATH=" >> $GITHUB_ENV
+            echo "APK_NAME=" >> $GITHUB_ENV
+          else
+            echo "Found APK: $APK"
+            echo "APK_PATH=$APK" >> $GITHUB_ENV
+            echo "APK_NAME=$(basename "$APK")" >> $GITHUB_ENV
+          fi
+
+      - name: Create GitHub Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ github.run_number }}
+          release_name: Build ${{ github.run_number }}
+          body: "TWA build artifacts"
+          draft: false
+          prerelease: false
+
+      - name: Upload APK to Release
+        if: env.APK_PATH != ''
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ${{ env.APK_PATH }}
+          asset_name: ${{ env.APK_NAME }}
+          asset_content_type: application/vnd.android.package-archive

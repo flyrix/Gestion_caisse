@@ -1,0 +1,18 @@
+{
+  "packageId": "com.example.caisse",
+  "host": "votre-site.com",
+  "name": "Gestion de Caisse",
+  "shortName": "Caisse",
+  "manifestUrl": "https://votre-site/manifest.json",
+  "startUrl": "/",
+  "display": "standalone",
+  "themeColor": "#3498db",
+  "backgroundColor": "#ffffff",
+  "launcherName": "Gestion de Caisse",
+  "signingKey": {
+    "path": "release-keystore.jks",
+    "alias": "my-key-alias",
+    "storePassword": "REPLACE_WITH_STORE_PASSWORD",
+    "keyPassword": "REPLACE_WITH_KEY_PASSWORD"
+  }
+}

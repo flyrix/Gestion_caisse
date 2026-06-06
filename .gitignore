@@ -1,0 +1,30 @@
+# Node
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Build outputs
+/build/
+/dist/
+/output/
+
+# OS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Keys and sensitive
+*.jks
+*.keystore
+.env
+.env.*
+
+# Android
+/android/
+/gradle/
+
+# Packages
+*.apk
+*.aab
