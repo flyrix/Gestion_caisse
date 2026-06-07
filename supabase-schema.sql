@@ -22,7 +22,7 @@ alter table public.profiles enable row level security;
 
 create policy "Users can manage their own operations"
   on public.operations
-  for select, insert, update, delete
+  for all
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
 
@@ -33,6 +33,6 @@ create policy "Public select profiles for username lookup"
 
 create policy "Users can manage their own profile"
   on public.profiles
-  for insert, update, delete
+  for all
   using (auth.uid() = id)
   with check (auth.uid() = id);
