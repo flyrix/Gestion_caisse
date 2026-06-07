@@ -2,6 +2,7 @@
 let credits = [];
 let monnaies = [];
 let currentUser = null;
+let realtimeChannel = null;
 
 // 2. Sélection des éléments du DOM
 const inputClient = document.querySelector('#client');
@@ -41,6 +42,10 @@ window.addEventListener('load', async () => {
 
         if (btnDeconnexion) {
             btnDeconnexion.addEventListener('click', async () => {
+                if (realtimeChannel) {
+                    SupabaseDB.unsubscribeChannel(realtimeChannel);
+                    realtimeChannel = null;
+                }
                 await Auth.signOut();
                 window.location.href = 'auth.html';
             });
@@ -65,6 +70,27 @@ window.addEventListener('load', async () => {
         }
 
         trierOperations();
+        // Subscribe to realtime changes for this user's operations
+        try {
+            realtimeChannel = await SupabaseDB.subscribeToOperations(currentUser.id, async (payload) => {
+                // On any change, refetch operations for the current user and refresh UI
+                try {
+                    const fresh = await SupabaseDB.fetchOperations(currentUser.id);
+                    credits = [];
+                    monnaies = [];
+                    fresh.forEach(o => {
+                        if (o.type === 'credit') credits.push(o);
+                        else if (o.type === 'monnaie') monnaies.push(o);
+                    });
+                    trierOperations();
+                    afficherListes();
+                } catch (e) {
+                    console.warn('Realtime handler error', e);
+                }
+            });
+        } catch (e) {
+            console.warn('Could not subscribe realtime', e);
+        }
     } catch (err) {
         console.warn('Init error', err);
         if (!currentUser) {

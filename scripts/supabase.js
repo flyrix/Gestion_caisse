@@ -114,6 +114,43 @@ const SupabaseDB = (function() {
     saveOperation,
     updateOperation,
     deleteOperation,
-    deleteOperations
+    deleteOperations,
+    // Realtime helpers
+    subscribeToOperations,
+    unsubscribeChannel,
+    createProfile,
+    getEmailByUsername
   };
 })();
+
+// Implementation of realtime helpers (placed after the module to access `client`)
+async function subscribeToOperations(userId, handler) {
+  if (!userId) return null;
+  try {
+    const channel = client.channel('public:operations')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'operations' }, payload => {
+        // payload may contain eventType and new/old rows depending on version
+        handler(payload);
+      })
+      .subscribe();
+
+    return channel;
+  } catch (e) {
+    console.warn('Erreur subscribeToOperations', e.message || e);
+    return null;
+  }
+}
+
+function unsubscribeChannel(channel) {
+  try {
+    if (!channel) return;
+    // channel may expose unsubscribe() or unsubscribe
+    if (typeof channel.unsubscribe === 'function') {
+      channel.unsubscribe();
+    } else if (typeof client.removeChannel === 'function') {
+      client.removeChannel(channel);
+    }
+  } catch (e) {
+    console.warn('Erreur unsubscribeChannel', e.message || e);
+  }
+}
