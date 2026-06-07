@@ -37,6 +37,38 @@ jobs:
           PACKAGE_ID: ${{ secrets.PACKAGE_ID }}
         run: ./scripts/build_twa.sh "$MANIFEST_URL" "$PACKAGE_ID"
 
+      - name: Decode keystore (optional)
+        if: ${{ secrets.KEYSTORE_BASE64 != '' }}
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 --decode > release-keystore.jks
+
+      - name: Build APK
+        env:
+          MANIFEST_URL: ${{ secrets.MANIFEST_URL }}
+          PACKAGE_ID: ${{ secrets.PACKAGE_ID }}
+        run: |
+          if [ -f release-keystore.jks ]; then
+            ./scripts/build_twa.sh "$MANIFEST_URL" "$PACKAGE_ID" release-keystore.jks
+          else
+            ./scripts/build_twa.sh "$MANIFEST_URL" "$PACKAGE_ID"
+          fi
+
+      - name: Sign APK (optional)
+        if: ${{ secrets.KEYSTORE_BASE64 != '' }}
+        env:
+          KEYSTORE_PATH: release-keystore.jks
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          STOREPASS: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEYPASS: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          # Find unsigned apk output from bubblewrap
+          set -e
+          APK_PATH="$(ls build/*.apk 2>/dev/null || ls output/*.apk 2>/dev/null || true)"
+          if [ -z "$APK_PATH" ]; then echo "APK not found"; exit 1; fi
+          ./scripts/sign_apk.sh "$APK_PATH" "$KEYSTORE_PATH" "$KEY_ALIAS" "$STOREPASS" "$KEYPASS"
+
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
@@ -44,3 +76,4 @@ jobs:
           path: |
             build/*.apk
             output/*.apk
+            signed-*.apk
