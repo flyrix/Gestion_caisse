@@ -1,0 +1,46 @@
+name: Build APK
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch: {}
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Android SDK build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget unzip
+          yes | sdkmanager --sdk_root=$ANDROID_SDK_ROOT "platform-tools" "platforms;android-31" "build-tools;31.0.0"
+
+      - name: Install Bubblewrap
+        run: npm install -g @bubblewrap/cli
+
+      - name: Ensure build script executable
+        run: chmod +x scripts/build_twa.sh
+
+      - name: Build APK
+        env:
+          MANIFEST_URL: ${{ secrets.MANIFEST_URL }}
+          PACKAGE_ID: ${{ secrets.PACKAGE_ID }}
+        run: ./scripts/build_twa.sh "$MANIFEST_URL" "$PACKAGE_ID"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: apk-files
+          path: |
+            build/*.apk
+            output/*.apk

@@ -1,6 +1,7 @@
 // 1. Initialisation des listes (Tableaux d'objets)
 let credits = [];
 let monnaies = [];
+let currentUser = null;
 
 // 2. Sélection des éléments du DOM
 const inputClient = document.querySelector('#client');
@@ -10,29 +11,66 @@ const ajouter = document.querySelector('#btn-ajouter');
 const btnMicro = document.querySelector('#btn-micro');
 const btnLireTout = document.querySelector('#btn-lire-tout');
 const btnEffacerRegles = document.querySelector('#btn-effacer-regles');
+const btnDeconnexion = document.querySelector('#btn-deconnexion');
 
 const affichageCredit = document.querySelector('#affichage-credits');
 const affichageMonnaie = document.querySelector('#affichage-monnaies');
 const totalCredits = document.querySelector('#total-credits');
 const totalMonnaies = document.querySelector('#total-monnaies');
 const soldeNet = document.querySelector('#solde-net');
+const userEmailDisplay = document.querySelector('#user-email');
+const authBar = document.querySelector('#auth-bar');
 
 const formatMontant = (montant) => `${Number(montant).toLocaleString('fr-FR')} FCFA`;
 
 // Initialisation DB et chargement des opérations persistées
 window.addEventListener('load', async () => {
     try {
+        await SupabaseDB.init();
+        const session = await SupabaseDB.getSession();
+        if (!session) {
+            window.location.href = 'auth.html';
+            return;
+        }
+
+        currentUser = session.user;
+        if (userEmailDisplay) {
+            userEmailDisplay.textContent = currentUser.email || 'Utilisateur';
+            authBar.hidden = false;
+        }
+
+        if (btnDeconnexion) {
+            btnDeconnexion.addEventListener('click', async () => {
+                await Auth.signOut();
+                window.location.href = 'auth.html';
+            });
+        }
+
         if (window.DB) {
             await DB.init();
+        }
+
+        const supaOps = await SupabaseDB.fetchOperations(currentUser.id);
+        if (Array.isArray(supaOps) && supaOps.length > 0) {
+            supaOps.forEach(o => {
+                if (o.type === 'credit') credits.push(o);
+                else if (o.type === 'monnaie') monnaies.push(o);
+            });
+        } else if (window.DB) {
             const ops = await DB.getAll();
             ops.forEach(o => {
                 if (o.type === 'credit') credits.push(o);
                 else if (o.type === 'monnaie') monnaies.push(o);
             });
-            trierOperations();
         }
+
+        trierOperations();
     } catch (err) {
-        console.warn('DB init error', err);
+        console.warn('Init error', err);
+        if (!currentUser) {
+            window.location.href = 'auth.html';
+            return;
+        }
     } finally {
         afficherListes();
     }
@@ -116,6 +154,9 @@ ajouter.addEventListener('click', async () => {
         if (window.DB) {
             await DB.addOperation(nouvelleOperation);
         }
+        if (currentUser) {
+            SupabaseDB.saveOperation(nouvelleOperation, currentUser.id).catch(err => console.warn('Supabase save error', err));
+        }
 
         if (type === 'credit') { 
             credits.push(nouvelleOperation);
@@ -131,7 +172,7 @@ ajouter.addEventListener('click', async () => {
         afficherListes();
     } catch (err) {
         console.warn('Erreur ajout operation', err);
-        alert('Erreur lors de l\'enregistrement local');
+        alert('Erreur lors de l\'enregistrement');
     }
 });
 
@@ -150,6 +191,9 @@ async function reglerOperation(id, type) {
     operation.paye = !operation.paye;
     if (window.DB) {
         DB.update(operation).catch(e => console.warn(e));
+    }
+    if (currentUser) {
+        SupabaseDB.updateOperation(operation, currentUser.id).catch(e => console.warn(e));
     }
 
     if (operation.paye) {
@@ -178,6 +222,9 @@ async function supprimerOperation(id, type) {
 
     if (window.DB) {
         DB.remove(id).catch(e => console.warn(e));
+    }
+    if (currentUser) {
+        SupabaseDB.deleteOperation(id, currentUser.id).catch(e => console.warn(e));
     }
 
     parler(`Opération de ${operation.client} supprimée.`);
@@ -323,6 +370,9 @@ btnEffacerRegles.addEventListener('click', async () => {
 
     if (window.DB) {
         DB.removeMany(ids).catch(e => console.warn(e));
+    }
+    if (currentUser) {
+        SupabaseDB.deleteOperations(ids, currentUser.id).catch(e => console.warn(e));
     }
 
     parler("Les opérations réglées ont été effacées.");

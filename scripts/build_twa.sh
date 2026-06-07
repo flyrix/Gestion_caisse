@@ -19,7 +19,11 @@ if ! command -v bubblewrap >/dev/null 2>&1; then
 fi
 
 echo "Initialisation TWA..."
-bubblewrap init --manifestUrl="$MANIFEST_URL" --packageId="$PACKAGE_ID" --appVersionName=1.0.0 --appVersionCode=1 --display=standalone
+if [ -f "twa-manifest.json" ]; then
+  echo "Fichier twa-manifest.json existant détecté, utilisation du fichier existant."
+else
+  bubblewrap init --manifestUrl="$MANIFEST_URL" --packageId="$PACKAGE_ID" --appVersionName=1.0.0 --appVersionCode=1 --display=standalone
+fi
 
 if [ -n "$KEYSTORE_PATH" ]; then
   echo "Building release APK with keystore $KEYSTORE_PATH"
