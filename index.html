@@ -71,6 +71,24 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/supabase.min.js"></script>
     <script src="scripts/supabase-config.js"></script>
     <script src="scripts/supabase.js"></script>
+    <script>
+        // Redirection rapide vers la page d'authentification si pas de session.
+        (async () => {
+            try {
+                if (window.SupabaseDB && typeof SupabaseDB.init === 'function') {
+                    await SupabaseDB.init();
+                    const session = await SupabaseDB.getSession();
+                    if (!session) {
+                        window.location.href = 'auth.html';
+                    }
+                }
+            } catch (e) {
+                // En cas d'erreur (config manquante ou clé invalide), rediriger vers auth
+                console.warn('Redirect check error', e);
+                window.location.href = 'auth.html';
+            }
+        })();
+    </script>
     <script src="scripts/db.js"></script>
     <script src="scripts/auth.js"></script>
     <script src="scripts/script.js"></script>
