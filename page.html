@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="styles/style.css" />
+    <link rel="icon" href="icons/icon-192.png" />
+    <link rel="manifest" href="manifest.json" />
+    <meta name="theme-color" content="#3498db" />
+    <title>Gestion de Caisse Vocale</title>
+</head>
+<body>
+    <h1>Gestion de Caisse</h1>
+
+    <div id="auth-bar" class="auth-bar" hidden>
+        <span>Connecté(e) en tant que <strong id="user-email"></strong></span>
+        <button id="btn-deconnexion" type="button">Se déconnecter</button>
+    </div>
+
+    <div id="formulaire">
+        <h3>Nouvelle Opération</h3>
+
+        <div class="champ-vocal">
+            <input type="text" id="client" placeholder="Nom du client" />
+            <button id="btn-micro" title="Dicter le nom">🎙️</button>
+        </div>
+
+        <input type="number" id="montant" placeholder="Montant (FCFA)" />
+
+        <select id="type">
+            <option value="credit">Il me doit (Crédit)</option>
+            <option value="monnaie">Je lui dois (Monnaie)</option>
+        </select>
+
+        <button id="btn-ajouter">Enregistrer</button>
+    </div>
+
+    <hr />
+
+    <div class="zone-audio-globale">
+        <button id="btn-lire-tout">🔊 Écouter tout le carnet</button>
+        <button id="btn-effacer-regles">Effacer les réglés</button>
+    </div>
+
+    <section id="resume" aria-label="Résumé du carnet">
+        <div>
+            <span>Total crédits</span>
+            <strong id="total-credits">0 FCFA</strong>
+        </div>
+        <div>
+            <span>Total monnaies</span>
+            <strong id="total-monnaies">0 FCFA</strong>
+        </div>
+        <div>
+            <span>Solde net</span>
+            <strong id="solde-net">0 FCFA</strong>
+        </div>
+    </section>
+
+    <div id="listes-container">
+        <section class="colonne">
+            <h2>Ils me doivent (Crédits)</h2>
+            <ul id="affichage-credits"></ul>
+        </section>
+
+        <section class="colonne">
+            <h2>Je leur dois (Monnaies)</h2>
+            <ul id="affichage-monnaies"></ul>
+        </section>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/supabase.min.js"></script>
+    <script src="scripts/supabase-config.js"></script>
+    <script src="scripts/supabase.js"></script>
+    <script>
+        // Redirection rapide vers la page d'authentification si pas de session.
+        (async () => {
+            try {
+                if (window.SupabaseDB && typeof SupabaseDB.init === 'function') {
+                    await SupabaseDB.init();
+                    const session = await SupabaseDB.getSession();
+                    if (!session) {
+                        window.location.href = 'auth.html';
+                    }
+                }
+            } catch (e) {
+                // En cas d'erreur (config manquante ou clé invalide), rediriger vers auth
+                console.warn('Redirect check error', e);
+                window.location.href = 'auth.html';
+            }
+        })();
+    </script>
+    <script src="scripts/db.js"></script>
+    <script src="scripts/auth.js"></script>
+    <script src="scripts/script.js"></script>
+
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js')
+                .then(() => console.log('Service Worker enregistré'))
+                .catch(err => console.warn('SW erreur:', err));
+        }
+    </script>
+</body>
+</html>
