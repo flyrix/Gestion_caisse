@@ -34,7 +34,7 @@ const Auth = (function() {
   async function requireAuth() {
     const session = await getSession();
     if (!session) {
-      window.location.href = 'auth.html';
+      window.location.href = 'index.html';
       return null;
     }
     return session;
@@ -43,7 +43,7 @@ const Auth = (function() {
   async function redirectIfAuthenticated() {
     const session = await getSession();
     if (session) {
-      window.location.href = 'index.html';
+      window.location.href = 'page.html';
     }
     return session;
   }
@@ -91,7 +91,7 @@ if (document.body.contains(document.querySelector('#btn-connexion'))) {
         return;
       }
       if (data.session) {
-        window.location.href = 'index.html';
+        window.location.href = 'page.html';
       }
     });
 
@@ -123,7 +123,7 @@ if (document.body.contains(document.querySelector('#btn-connexion'))) {
         return;
       }
       const { data, error } = await supabase.auth.resetPasswordForEmail(identifier, {
-        redirectTo: window.location.origin + '/auth.html'
+        redirectTo: window.location.origin + '/page.html'
       });
       if (error) {
         showMessage(error.message, true);
