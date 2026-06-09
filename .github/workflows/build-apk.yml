@@ -44,15 +44,16 @@ jobs:
           echo "Keystore restauré avec succès."
 
       # Un SEUL build propre selon la présence ou non du Keystore
+      # Un SEUL build propre avec tes valeurs directement intégrées
       - name: Run Build TWA Script
-        env:
-          MANIFEST_URL: ${{ secrets.MANIFEST_URL }}
-          PACKAGE_ID: ${{ secrets.PACKAGE_ID }}
         run: |
+          URL_APP="https://celadon-sprite-c23deb.netlify.app/manifest.json"
+          ID_PACKAGE="com.kacou.gestioncaisse"
+
           if [ -f release-keystore.jks ]; then
-            ./scripts/build_twa.sh "$MANIFEST_URL" "$PACKAGE_ID" release-keystore.jks
+            ./scripts/build_twa.sh "$URL_APP" "$ID_PACKAGE" release-keystore.jks
           else
-            ./scripts/build_twa.sh "$MANIFEST_URL" "$PACKAGE_ID"
+            ./scripts/build_twa.sh "$URL_APP" "$ID_PACKAGE"
           fi
 
       # Signature de l'APK (Validation via l'environnement pour éviter le blocage)
