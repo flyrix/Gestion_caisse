@@ -66,7 +66,7 @@ const SupabaseDB = (function() {
       .from('operations')
       .select('*')
       .eq('user_id', userId)
-      .order('createdAt', { ascending: false });
+      .order('createdat', { ascending: false });
     if (error) {
       console.warn('Erreur Supabase fetchOperations', error.message);
       return [];
