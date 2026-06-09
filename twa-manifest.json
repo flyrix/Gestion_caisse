@@ -5,6 +5,7 @@
   "shortName": "Caisse",
   "manifestUrl": "https://votre-site/manifest.json",
   "startUrl": "/",
+  "iconUrl": "https://celadon-sprite-c23deb.netlify.app/icons/icon-512x512.png",
   "display": "standalone",
   "themeColor": "#3498db",
   "backgroundColor": "#ffffff",

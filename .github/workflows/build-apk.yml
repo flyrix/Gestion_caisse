@@ -47,22 +47,25 @@ jobs:
           echo "$MY_KEYSTORE_SECRET" | base64 --decode > release-keystore.jks
           echo "Keystore restauré avec succès."
 
-     # Configuration des chemins d'accès pour Bubblewrap et exécution automatique
+    # Configuration des chemins d'accès pour Bubblewrap et exécution automatique
       - name: Run Build TWA Script
         run: |
-          # 1. On crée la configuration pour localiser Java et le SDK Android
+          # 1. Configuration des chemins
           mkdir -p ~/.bubblewrap
           echo '{"jdkPath":"'"$JAVA_HOME"'","androidSdkPath":"'"$ANDROID_HOME"'"}' > ~/.bubblewrap/config.json
           
-          # 2. Acceptation automatique des licences Android
+          # 2. Acceptation des licences
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
 
           URL_APP="https://celadon-sprite-c23deb.netlify.app/manifest.json"
           ID_PACKAGE="com.kacou.gestioncaisse"
 
-          # 🟢 ÉTAPE CLÉ : On force la mise à jour automatique pour créer le fichier checksum manquant
-          echo "Mise à jour automatique du projet Bubblewrap..."
-          bubblewrap update --yes
+          # 🟢 SÉCURITÉ : Si le manifeste local est corrompu ou incomplet, on le supprime
+          # pour forcer Bubblewrap à récupérer le manifest tout propre depuis Netlify
+          rm -f twa-manifest.json
+
+          echo "Initialisation d'un nouveau projet Bubblewrap propre..."
+          bubblewrap init --manifestUrl="$URL_APP" --packageId="$ID_PACKAGE" --appVersionName=1.0.0 --appVersionCode=1 --display=standalone --yes
 
           # 3. Lancement du build final
           if [ -f release-keystore.jks ]; then
