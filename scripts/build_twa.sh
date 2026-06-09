@@ -27,10 +27,10 @@ fi
 
 if [ -n "$KEYSTORE_PATH" ]; then
   echo "Building release APK with keystore $KEYSTORE_PATH"
-  bubblewrap build --keystorePath="$KEYSTORE_PATH"
+  bubblewrap build --keystorePath="$KEYSTORE_PATH"--yes
 else
   echo "Building debug APK (no keystore provided)"
-  bubblewrap build --debug
+  bubblewrap build --debug --yes
 fi
 
 echo "Build terminé. Vérifiez le dossier 'output' ou 'build' généré par bubblewrap."
