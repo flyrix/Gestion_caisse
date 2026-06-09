@@ -9,28 +9,33 @@
     <title>Connexion - Gestion de Caisse</title>
 </head>
 <body>
-    <h1>Connexion</h1>
+    <h1 id="auth-title">Connexion</h1>
 
     <div class="auth-card">
-        <p class="auth-description">Connectez-vous pour accéder à votre carnet de caisse et synchroniser vos opérations dans Supabase.</p>
+        <p id="auth-desc" class="auth-description">Connectez-vous pour accéder à votre carnet de caisse et synchroniser vos opérations.</p>
 
-        <label for="identifier">Email ou nom d'utilisateur</label>
+        <!-- Champ Identifiant (Sert d'E-mail pour l'inscription, ou d'E-mail/Pseudo pour la connexion) -->
+        <label id="label-identifier" for="identifier">Email ou nom d'utilisateur</label>
         <input type="text" id="identifier" placeholder="votre@exemple.com ou monutilisateur" />
 
         <label for="password">Mot de passe</label>
         <input type="password" id="password" placeholder="Mot de passe" />
 
-        <label for="signup-username">Nom d'utilisateur (pour création de compte)</label>
-        <input type="text" id="signup-username" placeholder="Choisissez un nom d'utilisateur" />
-
-        <div class="auth-actions">
-            <button id="btn-connexion" type="button">Se connecter</button>
-            <button id="btn-inscription" type="button">Créer un compte</button>
+        <!-- Ce bloc sera masqué en mode connexion et affiché en mode inscription -->
+        <div id="signup-profile-group" hidden>
+            <label for="signup-username">Nom d'utilisateur (Pseudo)</label>
+            <input type="text" id="signup-username" placeholder="Choisissez un nom d'utilisateur" />
         </div>
 
+        <div class="auth-actions" style="margin-top: 15px; display: flex; flex-direction: column; gap: 10px;">
+            <button id="btn-principal" type="button">Se connecter</button>
+            <button id="btn-basculer" type="button" class="btn-secondaire">Pas de compte ? S'inscrire</button>
+        </div>
+
+        <hr style="border: 0; border-top: 1px solid #eee; margin: 15px 0;" />
         <button id="btn-reset" type="button" class="btn-secondaire">Mot de passe oublié</button>
 
-        <div id="auth-message" class="auth-message"></div>
+        <div id="auth-message" class="auth-message" style="margin-top: 10px; font-weight: bold;"></div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/supabase.min.js"></script>
