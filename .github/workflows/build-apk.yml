@@ -25,6 +25,10 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      # 🟢 ÉTAPE CLÉ : On installe un SDK Android tout propre et complet
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
       # Installer Bubblewrap proprement
       - name: Install Bubblewrap
         run: npm install -g @bubblewrap/cli
@@ -43,13 +47,16 @@ jobs:
           echo "$MY_KEYSTORE_SECRET" | base64 --decode > release-keystore.jks
           echo "Keystore restauré avec succès."
 
-    # Configuration des chemins d'accès pour Bubblewrap et exécution automatique
+      # Configuration dynamique et exécution
       - name: Run Build TWA Script
         run: |
-          # 1. On crée la configuration en utilisant la vraie variable $ANDROID_HOME de GitHub
+          # 1. On injecte les variables lues directement depuis les outils configurés par GitHub
           mkdir -p ~/.bubblewrap
           echo '{"jdkPath":"'"$JAVA_HOME"'","androidSdkPath":"'"$ANDROID_HOME"'"}' > ~/.bubblewrap/config.json
           
+          # Optionnel : On accepte les licences Android au cas où
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
+
           URL_APP="https://celadon-sprite-c23deb.netlify.app/manifest.json"
           ID_PACKAGE="com.kacou.gestioncaisse"
 
