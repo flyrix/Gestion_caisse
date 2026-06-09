@@ -1,3 +1,6 @@
+/**
+ * CONTROLEUR DE LA BASE DE DONNÉES (Supabase DB & Realtime)
+ */
 const SupabaseDB = (function() {
   const SUPABASE_URL = window.SUPABASE_URL || '';
   const SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY || '';
@@ -6,6 +9,7 @@ const SupabaseDB = (function() {
     console.warn('Supabase non configuré : remplissez scripts/supabase-config.js');
   }
 
+  // Création du client d'API Supabase
   const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     auth: {
       persistSession: true,
@@ -31,6 +35,7 @@ const SupabaseDB = (function() {
     return session?.user || null;
   }
 
+  // Permet de retrouver l'email d'un utilisateur via son pseudo (Login hybride)
   async function getEmailByUsername(username) {
     if (!username) return null;
     const { data, error } = await client
@@ -47,12 +52,14 @@ const SupabaseDB = (function() {
     return data?.email || null;
   }
 
+  // Crée la ligne de profil dans la table publique lors de l'inscription
   async function createProfile(userId, username, email) {
     if (!userId || !username || !email) return;
     const { error } = await client.from('profiles').upsert({ id: userId, username, email });
     if (error) console.warn('Erreur Supabase createProfile', error.message);
   }
 
+  // Rappatrie les crédits et monnaies depuis le cloud
   async function fetchOperations(userId) {
     if (!userId) return [];
     const { data, error } = await client
@@ -67,6 +74,7 @@ const SupabaseDB = (function() {
     return data || [];
   }
 
+  // Sauvegarde une nouvelle opération
   async function saveOperation(operation, userId) {
     if (!userId) return;
     const record = {
@@ -77,6 +85,7 @@ const SupabaseDB = (function() {
     if (error) console.warn('Erreur Supabase saveOperation', error.message);
   }
 
+  // Met à jour une opération (ex: marquer comme payé/barré)
   async function updateOperation(operation, userId) {
     if (!userId) return;
     const record = {
@@ -87,6 +96,7 @@ const SupabaseDB = (function() {
     if (error) console.warn('Erreur Supabase updateOperation', error.message);
   }
 
+  // Supprime une seule opération
   async function deleteOperation(id, userId) {
     if (!id || !userId) return;
     const { error } = await client
@@ -96,6 +106,7 @@ const SupabaseDB = (function() {
     if (error) console.warn('Erreur Supabase deleteOperation', error.message);
   }
 
+  // Nettoyage en lot des opérations réglées
   async function deleteOperations(ids, userId) {
     if (!ids?.length || !userId) return;
     const { error } = await client
@@ -106,6 +117,38 @@ const SupabaseDB = (function() {
     if (error) console.warn('Erreur Supabase deleteOperations', error.message);
   }
 
+  // Écouteur Temps Réel (Websocket) pour synchroniser instantanément les lignes de caisse
+  async function subscribeToOperations(userId, handler) {
+    if (!userId) return null;
+    try {
+      const channel = client.channel('public:operations')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'operations' }, payload => {
+          handler(payload);
+        })
+        .subscribe();
+
+      return channel;
+    } catch (e) {
+      console.warn('Erreur subscribeToOperations', e.message || e);
+      return null;
+    }
+  }
+
+  // Fermeture propre du canal temps réel lors de la déconnexion
+  function unsubscribeChannel(channel) {
+    try {
+      if (!channel) return;
+      if (typeof channel.unsubscribe === 'function') {
+        channel.unsubscribe();
+      } else if (typeof client.removeChannel === 'function') {
+        client.removeChannel(channel);
+      }
+    } catch (e) {
+      console.warn('Erreur unsubscribeChannel', e.message || e);
+    }
+  }
+
+  // On retourne TOUTES les fonctions, y compris le realtime qui est maintenant bien englobé
   return {
     init,
     getSession,
@@ -115,43 +158,9 @@ const SupabaseDB = (function() {
     updateOperation,
     deleteOperation,
     deleteOperations,
-    // Realtime helpers
     subscribeToOperations,
     unsubscribeChannel,
     createProfile,
     getEmailByUsername
   };
-
-
-// Implementation of realtime helpers (placed after the module to access `client`)
-async function subscribeToOperations(userId, handler) {
-  if (!userId) return null;
-  try {
-    const channel = client.channel('public:operations')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'operations' }, payload => {
-        // payload may contain eventType and new/old rows depending on version
-        handler(payload);
-      })
-      .subscribe();
-
-    return channel;
-  } catch (e) {
-    console.warn('Erreur subscribeToOperations', e.message || e);
-    return null;
-  }
-}
-
-function unsubscribeChannel(channel) {
-  try {
-    if (!channel) return;
-    // channel may expose unsubscribe() or unsubscribe
-    if (typeof channel.unsubscribe === 'function') {
-      channel.unsubscribe();
-    } else if (typeof client.removeChannel === 'function') {
-      client.removeChannel(channel);
-    }
-  } catch (e) {
-    console.warn('Erreur unsubscribeChannel', e.message || e);
-  }
-}
-})();
+})(); // L'accolade ferme maintenant parfaitement le module tout à la fin
