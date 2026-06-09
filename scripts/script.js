@@ -70,10 +70,10 @@ window.addEventListener('load', async () => {
         }
 
         trierOperations();
-        // Subscribe to realtime changes for this user's operations
+        
+        // Flux Temps Réel (Websocket)
         try {
             realtimeChannel = await SupabaseDB.subscribeToOperations(currentUser.id, async (payload) => {
-                // On any change, refetch operations for the current user and refresh UI
                 try {
                     const fresh = await SupabaseDB.fetchOperations(currentUser.id);
                     credits = [];
@@ -107,10 +107,10 @@ window.addEventListener('load', async () => {
 // ==========================================
 const parler = (texte) => {
     if (!('speechSynthesis' in window)) return;
-    window.speechSynthesis.cancel(); // Arrête la voix si elle parlait déjà
+    window.speechSynthesis.cancel(); 
     const message = new SpeechSynthesisUtterance(texte);
     message.lang = "fr-FR";
-    message.rate = 0.85; // Rythme légèrement ralenti pour la clarté des mamans
+    message.rate = 0.85; 
     window.speechSynthesis.speak(message);
 };
 
@@ -127,17 +127,16 @@ if (SpeechRecognition) {
     btnMicro.addEventListener('click', () => {
         parler("Dites le nom du client");
         
-        // On attend que l'application finisse sa phrase avant d'ouvrir le micro
         setTimeout(() => {
-            btnMicro.style.backgroundColor = "#ff3b30"; // Devient rouge quand il écoute
+            btnMicro.style.backgroundColor = "#ff3b30"; 
             reconnaissance.start();
         }, 1200);
     });
 
     reconnaissance.onresult = (event) => {
         const nomDicte = event.results[0][0].transcript;
-        inputClient.value = nomDicte; // Écrit automatiquement dans la case
-        btnMicro.style.backgroundColor = "#2ecc71"; // Redevient vert
+        inputClient.value = nomDicte; 
+        btnMicro.style.backgroundColor = "#2ecc71"; 
         parler(`Nom enregistré : ${nomDicte}`);
     };
 
@@ -150,7 +149,7 @@ if (SpeechRecognition) {
         btnMicro.style.backgroundColor = "#2ecc71";
     };
 } else {
-    btnMicro.style.display = "none"; // Cache le micro si le smartphone est incompatible
+    btnMicro.style.display = "none";
 }
 
 // ==========================================
@@ -167,13 +166,15 @@ ajouter.addEventListener('click', async () => {
         return;
     }
     
+    const maintenant = new Date().toISOString();
     const nouvelleOperation = {
         id: Date.now(), 
         client: nom, 
         montant: somme,
         paye: false,
         type: type,
-        createdAt: new Date().toISOString()
+        createdat: maintenant, // 🟢 Remplacé par des minuscules pour s'aligner avec Supabase DB
+        createdAt: maintenant  // Sécurité pour la base locale IndexedDB
     };
 
     try {
@@ -203,7 +204,7 @@ ajouter.addEventListener('click', async () => {
 });
 
 // ==========================================
-// FONCTION POUR MARQUER COMME RÉGLÉ (BARRER)
+// FONCTIONS DE MISE À JOUR ET SUPPRESSION
 // ==========================================
 function trouverOperation(id, type) {
     const liste = type === 'credit' ? credits : monnaies;
@@ -273,6 +274,9 @@ function creerMessageVide(texte) {
     return item;
 }
 
+// ==========================================
+// 🟢 CRÉATION DU COMPOSANT GRAPHIQUE (CORRIGÉ AVEC DATE)
+// ==========================================
 function creerLigneOperation(element, type) {
     const item = document.createElement('li');
     item.className = element.paye ? 'operation reglee' : 'operation';
@@ -287,11 +291,21 @@ function creerLigneOperation(element, type) {
     const montant = document.createElement('strong');
     montant.textContent = formatMontant(element.montant);
 
+    // --- RESTRUCTURATION ET AJOUT DE LA DATE DE CRÉATION ---
+    const dateSource = element.createdat || element.createdAt;
+    let texteDate = "";
+    if (dateSource) {
+        const d = new Date(dateSource);
+        texteDate = " | Le " + d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' }) + 
+                    " à " + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+    }
+
     const statut = document.createElement('span');
     statut.className = 'operation-statut';
-    statut.textContent = element.paye
-        ? (type === 'credit' ? 'Réglé' : 'Rendu')
-        : 'En attente';
+    
+    // On combine l'état actuel (Réglé/En attente) et la date d'enregistrement
+    const etatActuel = element.paye ? (type === 'credit' ? 'Réglé' : 'Rendu') : 'En attente';
+    statut.textContent = `${etatActuel}${texteDate}`;
 
     details.append(titre, montant, statut);
 
@@ -326,9 +340,6 @@ function mettreAJourResume() {
     soldeNet.className = solde >= 0 ? 'positif' : 'negatif';
 }
 
-// ==========================================
-// FONCTION D'AFFICHAGE DYNAMIQUE (HTML)
-// ==========================================
 const afficherListes = () => {
     trierOperations();
     affichageCredit.innerHTML = "";
@@ -354,8 +365,6 @@ const afficherListes = () => {
 // ==========================================
 btnLireTout.addEventListener('click', () => {
     let lecture = "";
-
-    // Filtrage des éléments non encore réglés
     const restantsCredits = credits.filter(c => !c.paye);
     const restantsMonnaies = monnaies.filter(m => !m.paye);
 
@@ -380,6 +389,7 @@ btnLireTout.addEventListener('click', () => {
     parler(lecture);
 });
 
+// Nettoyage en lot
 btnEffacerRegles.addEventListener('click', async () => {
     const operationsReglees = [...credits, ...monnaies].filter(operation => operation.paye);
     if (operationsReglees.length === 0) {
@@ -404,10 +414,3 @@ btnEffacerRegles.addEventListener('click', async () => {
     parler("Les opérations réglées ont été effacées.");
     afficherListes();
 });
-// Gestion de la déconnexion
-if (btnDeconnexion) {
-    btnDeconnexion.addEventListener('click', async () => {
-        await Auth.signOut();
-        window.location.href = './index.html';
-    });
-}
