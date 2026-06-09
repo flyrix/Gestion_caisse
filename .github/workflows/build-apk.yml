@@ -47,33 +47,61 @@ jobs:
           echo "$MY_KEYSTORE_SECRET" | base64 --decode > release-keystore.jks
           echo "Keystore restauré avec succès."
 
-    # Configuration des chemins d'accès pour Bubblewrap et exécution automatique
+   # Génération directe du fichier twa-manifest et compilation
       - name: Run Build TWA Script
         run: |
-          # 1. Configuration des chemins
+          # 1. Configuration des chemins pour Bubblewrap
           mkdir -p ~/.bubblewrap
           echo '{"jdkPath":"'"$JAVA_HOME"'","androidSdkPath":"'"$ANDROID_HOME"'"}' > ~/.bubblewrap/config.json
           
-          # 2. Acceptation des licences
+          # 2. Acceptation des licences Android
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
 
+          # 3. CRÉATION DIRECTE DU FICHIER CONFIG (On court-circuite le "bubblewrap init")
+          echo "Génération du fichier twa-manifest.json de configuration..."
+          cat <<EOF > twa-manifest.json
+          {
+            "packageId": "com.kacou.gestioncaisse",
+            "host": "celadon-sprite-c23deb.netlify.app",
+            "name": "Gestion de Caisse",
+            "launcherName": "Caisse",
+            "displayName": "Gestion de Caisse",
+            "themeColor": "#3498db",
+            "navigationColor": "#000000",
+            "backgroundColor": "#ffffff",
+            "startUrl": "/",
+            "iconUrl": "https://celadon-sprite-c23deb.netlify.app/icons/icon-512x512.png",
+            "maskableIconUrl": "https://celadon-sprite-c23deb.netlify.app/icons/icon-512x512.png",
+            "appVersionName": "1.0.0",
+            "appVersionCode": 1,
+            "signingKey": {
+              "path": "release-keystore.jks",
+              "alias": "my-key-alias"
+            },
+            "alphaDependencies": false,
+            "enableSiteSettingsShortcut": true,
+            "isNotificationChannelEnabled": false,
+            "screenOrientation": "default",
+            "shortcuts": [],
+            "webManifestUrl": "https://celadon-sprite-c23deb.netlify.app/manifest.json",
+            "fallbackType": "customtabs",
+            "features": {},
+            "includeDynamicFeatures": false
+          }
+          EOF
+
+          # 4. On s'assure qu'un fichier checksum de base existe pour bloquer la question de régénération
+          echo "[]" > twa-crypto-checksums.json
+
+          # 5. Lancement du build final
           URL_APP="https://celadon-sprite-c23deb.netlify.app/manifest.json"
           ID_PACKAGE="com.kacou.gestioncaisse"
-
-          # 🟢 SÉCURITÉ : Si le manifeste local est corrompu ou incomplet, on le supprime
-          # pour forcer Bubblewrap à récupérer le manifest tout propre depuis Netlify
-          rm -f twa-manifest.json
-
-          echo "Initialisation d'un nouveau projet Bubblewrap propre..."
-          bubblewrap init --manifest="$URL_APP" --packageId="$ID_PACKAGE" --appVersionName=1.0.0 --appVersionCode=1 --display=standalone --yes
-
-          # 3. Lancement du build final
+          
           if [ -f release-keystore.jks ]; then
             ./scripts/build_twa.sh "$URL_APP" "$ID_PACKAGE" release-keystore.jks
           else
             ./scripts/build_twa.sh "$URL_APP" "$ID_PACKAGE"
           fi
-
       # Signature de l'APK (Validation via l'environnement pour éviter le blocage)
       - name: Sign APK (optional)
         env:
