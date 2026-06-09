@@ -43,12 +43,12 @@ jobs:
           echo "$MY_KEYSTORE_SECRET" | base64 --decode > release-keystore.jks
           echo "Keystore restauré avec succès."
 
-     # Configuration des chemins d'accès pour Bubblewrap et exécution automatique
+    # Configuration des chemins d'accès pour Bubblewrap et exécution automatique
       - name: Run Build TWA Script
         run: |
-          # 1. On crée la configuration de Bubblewrap pour qu'il ne pose pas de questions sur Java/Android
+          # 1. On crée la configuration en utilisant la vraie variable $ANDROID_HOME de GitHub
           mkdir -p ~/.bubblewrap
-          echo '{"jdkPath":"'"$JAVA_HOME"'","androidSdkPath":"/usr/local/lib/android/sdk"}' > ~/.bubblewrap/config.json
+          echo '{"jdkPath":"'"$JAVA_HOME"'","androidSdkPath":"'"$ANDROID_HOME"'"}' > ~/.bubblewrap/config.json
           
           URL_APP="https://celadon-sprite-c23deb.netlify.app/manifest.json"
           ID_PACKAGE="com.kacou.gestioncaisse"
