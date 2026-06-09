@@ -77,10 +77,19 @@ const SupabaseDB = (function() {
   // Sauvegarde une nouvelle opération
   async function saveOperation(operation, userId) {
     if (!userId) return;
+    
+    // On crée une copie propre de l'opération
     const record = {
       ...operation,
       user_id: userId
     };
+
+    // 
+    if (record.createdAt) {
+      record.createdat = record.createdAt;
+      delete record.createdAt; 
+    }
+
     const { error } = await client.from('operations').upsert(record);
     if (error) console.warn('Erreur Supabase saveOperation', error.message);
   }
@@ -88,14 +97,21 @@ const SupabaseDB = (function() {
   // Met à jour une opération (ex: marquer comme payé/barré)
   async function updateOperation(operation, userId) {
     if (!userId) return;
+    
     const record = {
       ...operation,
       user_id: userId
     };
+
+    
+    if (record.createdAt) {
+      record.createdat = record.createdAt;
+      delete record.createdAt;
+    }
+
     const { error } = await client.from('operations').upsert(record);
     if (error) console.warn('Erreur Supabase updateOperation', error.message);
   }
-
   // Supprime une seule opération
   async function deleteOperation(id, userId) {
     if (!id || !userId) return;
