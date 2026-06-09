@@ -404,3 +404,10 @@ btnEffacerRegles.addEventListener('click', async () => {
     parler("Les opérations réglées ont été effacées.");
     afficherListes();
 });
+// Gestion de la déconnexion
+if (btnDeconnexion) {
+    btnDeconnexion.addEventListener('click', async () => {
+        await Auth.signOut();
+        window.location.href = './index.html';
+    });
+}
