@@ -42,11 +42,11 @@ jobs:
 
       # Restauration sécurisée de ton fichier keystore binaire
       - name: Restore keystore from secret
-        if: ${{ secrets.KEYSTORE_BASE64 }}
         env:
-          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          MY_KEYSTORE_SECRET: ${{ secrets.KEYSTORE_BASE64 }}
+        if: ${{ env.MY_KEYSTORE_SECRET != '' }}
         run: |
-          echo "$KEYSTORE_BASE64" | base64 --decode > release-keystore.jks
+          echo "$MY_KEYSTORE_SECRET" | base64 --decode > release-keystore.jks
           echo "Keystore restauré avec succès."
 
       # Un SEUL build propre selon la présence ou non du Keystore
@@ -61,14 +61,15 @@ jobs:
             ./scripts/build_twa.sh "$MANIFEST_URL" "$PACKAGE_ID"
           fi
 
-      # Signature de l'APK (Syntaxe if corrigée pour éviter le blocage)
+      # Signature de l'APK (Validation via l'environnement pour éviter le blocage)
       - name: Sign APK (optional)
-        if: ${{ secrets.KEYSTORE_BASE64 && secrets.KEY_ALIAS }}
         env:
+          MY_KEYSTORE_SECRET: ${{ secrets.KEYSTORE_BASE64 }}
+          MY_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEYSTORE_PATH: release-keystore.jks
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           STOREPASS: ${{ secrets.KEYSTORE_PASSWORD }}
           KEYPASS: ${{ secrets.KEY_PASSWORD }}
+        if: ${{ env.MY_KEYSTORE_SECRET != '' && env.MY_KEY_ALIAS != '' }}
         run: |
           set -e
           APK_PATH="$(ls build/*.apk 2>/dev/null || ls output/*.apk 2>/dev/null || true)"
@@ -76,7 +77,7 @@ jobs:
             echo "Erreur : Aucun APK généré par le build script !" && exit 1
           fi
           if [ -f ./scripts/sign_apk.sh ]; then
-            ./scripts/sign_apk.sh "$APK_PATH" "$KEYSTORE_PATH" "$KEY_ALIAS" "$STOREPASS" "$KEYPASS"
+            ./scripts/sign_apk.sh "$APK_PATH" "$KEYSTORE_PATH" "$MY_KEY_ALIAS" "$STOREPASS" "$KEYPASS"
           else
             echo "Script de signature introuvable, utilisation de l'APK de build."
           fi
