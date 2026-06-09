@@ -1,16 +1,37 @@
 /**
- * MODULE AUTHENTIFICATION (Supabase Auth)
+ * MODULE AUTHENTIFICATION (Utilise le contrôleur SupabaseDB)
  */
 const Auth = (function() {
+  
+  // Fonction interne pour récupérer l'instance active du client Supabase
+  function getAuthClient() {
+    if (typeof SupabaseDB !== 'undefined' && SupabaseDB.client) {
+      return SupabaseDB.client;
+    }
+    // Repli de secours si le contrôleur n'est pas encore totalement prêt
+    if (typeof supabase !== 'undefined' && typeof supabase.createClient === 'function') {
+      const url = window.SUPABASE_URL || '';
+      const key = window.SUPABASE_ANON_KEY || '';
+      if (url && key) {
+        return supabase.createClient(url, key);
+      }
+    }
+    return null;
+  }
+
   // Inscription d'un nouvel utilisateur
   async function signUp(email, password, username) {
-    const { data, error } = await supabase.auth.signUp({
+    const client = getAuthClient();
+    if (!client) throw new Error("Le client Supabase n'est pas initialisé.");
+
+    const { data, error } = await client.auth.signUp({
       email,
       password,
       options: {
         data: { username }
       }
     });
+    
     if (!error && data.user) {
       await SupabaseDB.createProfile(data.user.id, username, email);
     }
@@ -19,23 +40,39 @@ const Auth = (function() {
 
   // Connexion de l'utilisateur (gère l'E-mail ou le Pseudo)
   async function signIn(identifier, password) {
+    const client = getAuthClient();
+    if (!client) throw new Error("Le client Supabase n'est pas initialisé.");
+
     let email = identifier;
     if (!identifier.includes('@')) {
       email = await SupabaseDB.getEmailByUsername(identifier);
+      if (!email) {
+        return { data: { session: null }, error: { message: "Nom d'utilisateur introuvable." } };
+      }
     }
-    return await supabase.auth.signInWithPassword({ email, password });
+    return await client.auth.signInWithPassword({ email, password });
   }
 
   // Déconnexion de la session actuelle
   async function signOut() {
-    return await supabase.auth.signOut();
+    const client = getAuthClient();
+    if (client) {
+      return await client.auth.signOut();
+    }
   }
 
-  // Récupération de la session active
+  // Récupération sécurisée de la session active via le contrôleur
   async function getSession() {
-    const { data, error } = await supabase.auth.getSession();
-    if (error) throw error;
-    return data.session;
+    if (typeof SupabaseDB !== 'undefined' && typeof SupabaseDB.getSession === 'function') {
+      return await SupabaseDB.getSession();
+    }
+    const client = getAuthClient();
+    if (client) {
+      const { data, error } = await client.auth.getSession();
+      if (error) throw error;
+      return data.session;
+    }
+    return null;
   }
 
   // Protection des pages privées : redirige vers l'accueil si non connecté
@@ -50,16 +87,24 @@ const Auth = (function() {
 
   // Protection de la page d'accueil : redirige vers le carnet si déjà connecté
   async function redirectIfAuthenticated() {
-    const session = await getSession();
-    if (session) {
-      window.location.href = './page.html';
+    try {
+      const session = await getSession();
+      if (session) {
+        window.location.href = './page.html';
+      }
+      return session;
+    } catch (e) {
+      console.warn("Impossible de vérifier la session au démarrage:", e.message);
+      return null;
     }
-    return session;
   }
 
   // Écouteur des changements d'état de l'authentification (login/logout)
   function onAuthStateChange(callback) {
-    return supabase.auth.onAuthStateChange((event, session) => callback(event, session));
+    const client = getAuthClient();
+    if (client) {
+      return client.auth.onAuthStateChange((event, session) => callback(event, session));
+    }
   }
 
   // Exposition des fonctions publiques
@@ -80,7 +125,7 @@ const Auth = (function() {
  */
 if (document.body.contains(document.querySelector('#btn-principal'))) {
   window.addEventListener('load', async () => {
-    // Si l'utilisateur est déjà connecté, on l'envoie directement sur le carnet de caisse
+    // Si l'utilisateur a déjà un jeton de session valide, on l'envoie sur le carnet
     await Auth.redirectIfAuthenticated();
 
     // Variable d'état pour suivre le mode actuel (true = Connexion, false = Inscription)
@@ -109,26 +154,26 @@ if (document.body.contains(document.querySelector('#btn-principal'))) {
     // Fonction pour basculer visuellement l'interface entre Connexion et Inscription
     const basculerMode = () => {
       isLoginMode = !isLoginMode;
-      messageBox.textContent = ""; // Nettoyage des anciens messages d'erreur/succès
+      messageBox.textContent = ""; // Nettoyage des anciens messages
 
       if (isLoginMode) {
         authTitle.textContent = "Connexion";
         authDesc.textContent = "Connectez-vous pour accéder à votre carnet de caisse et synchroniser vos opérations.";
         labelIdentifier.textContent = "Email ou nom d'utilisateur";
         inputIdentifier.placeholder = "votre@exemple.com ou monutilisateur";
-        signupGroup.hidden = true;
+        if (signupGroup) signupGroup.hidden = true;
         btnPrincipal.textContent = "Se connecter";
         btnBasculer.textContent = "Pas de compte ? S'inscrire";
-        btnReset.style.display = "block";
+        if (btnReset) btnReset.style.display = "block";
       } else {
         authTitle.textContent = "Inscription";
         authDesc.textContent = "Créez un compte pour sauvegarder vos crédits et monnaies en toute sécurité.";
         labelIdentifier.textContent = "Adresse Email";
         inputIdentifier.placeholder = "votre@exemple.com";
-        signupGroup.hidden = false;
+        if (signupGroup) signupGroup.hidden = false;
         btnPrincipal.textContent = "Créer mon compte";
         btnBasculer.textContent = "Déjà inscrit ? Se connecter";
-        btnReset.style.display = "none";
+        if (btnReset) btnReset.style.display = "none";
       }
     };
 
@@ -148,13 +193,19 @@ if (document.body.contains(document.querySelector('#btn-principal'))) {
         }
         showMessage('Connexion en cours...');
         
-        const { data, error } = await Auth.signIn(identifier, password);
-        if (error) {
-          showMessage(error.message, true);
-          return;
-        }
-        if (data.session) {
-          window.location.href = './page.html';
+        try {
+          const { data, error } = await Auth.signIn(identifier, password);
+          if (error) {
+            showMessage(error.message, true);
+            return;
+          }
+          if (data && data.session) {
+            window.location.href = './page.html';
+          } else {
+            showMessage('Session introuvable. Vérifiez vos identifiants.', true);
+          }
+        } catch (err) {
+          showMessage(err.message, true);
         }
       } else {
         // --- TRAITEMENT DE L'INSCRIPTION ---
@@ -171,35 +222,47 @@ if (document.body.contains(document.querySelector('#btn-principal'))) {
         
         showMessage('Création du compte en cours...');
         
-        const { data, error } = await Auth.signUp(identifier, password, username);
-        if (error) {
-          showMessage(error.message, true);
-          return;
+        try {
+          const { data, error } = await Auth.signUp(identifier, password, username);
+          if (error) {
+            showMessage(error.message, true);
+            return;
+          }
+          
+          showMessage('Compte créé avec succès ! Vérifiez votre boîte mail pour confirmer l’inscription.');
+          
+          // On repasse automatiquement l'interface en mode connexion après 3 secondes
+          setTimeout(basculerMode, 3000);
+        } catch (err) {
+          showMessage(err.message, true);
         }
-        
-        showMessage('Compte créé avec succès ! Vérifiez votre boîte mail pour confirmer l’inscription.');
-        
-        // On repasse automatiquement l'interface en mode connexion après 3 secondes
-        setTimeout(basculerMode, 3000);
       }
     });
 
     // --- TRAITEMENT DU MOT DE PASSE OUBLIÉ ---
-    btnReset.addEventListener('click', async () => {
-      const identifier = inputIdentifier.value.trim();
-      if (!identifier || !identifier.includes('@')) {
-        showMessage('Veuillez entrer votre adresse email dans le champ du haut pour réinitialiser le mot de passe.', true);
-        return;
-      }
-      
-      const { data, error } = await supabase.auth.resetPasswordForEmail(identifier, {
-        redirectTo: window.location.origin + '/page.html'
+    if (btnReset) {
+      btnReset.addEventListener('click', async () => {
+        const identifier = inputIdentifier.value.trim();
+        if (!identifier || !identifier.includes('@')) {
+          showMessage('Veuillez entrer votre adresse email dans le champ du haut pour réinitialiser le mot de passe.', true);
+          return;
+        }
+        
+        const client = getAuthClient();
+        if (!client) {
+          showMessage("Erreur d'initialisation de la base de données.", true);
+          return;
+        }
+
+        const { data, error } = await client.auth.resetPasswordForEmail(identifier, {
+          redirectTo: window.location.origin + '/page.html'
+        });
+        if (error) {
+          showMessage(error.message, true);
+          return;
+        }
+        showMessage('Email de réinitialisation envoyé.');
       });
-      if (error) {
-        showMessage(error.message, true);
-        return;
-      }
-      showMessage('Email de réinitialisation envoyé.');
-    });
+    }
   });
 }

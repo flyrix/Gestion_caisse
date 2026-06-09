@@ -150,6 +150,7 @@ const SupabaseDB = (function() {
 
   // On retourne TOUTES les fonctions, y compris le realtime qui est maintenant bien englobé
   return {
+    client,
     init,
     getSession,
     getUser,
