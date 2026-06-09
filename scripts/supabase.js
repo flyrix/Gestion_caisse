@@ -121,7 +121,7 @@ const SupabaseDB = (function() {
     createProfile,
     getEmailByUsername
   };
-})();
+
 
 // Implementation of realtime helpers (placed after the module to access `client`)
 async function subscribeToOperations(userId, handler) {
@@ -154,3 +154,4 @@ function unsubscribeChannel(channel) {
     console.warn('Erreur unsubscribeChannel', e.message || e);
   }
 }
+})();
