@@ -92,7 +92,7 @@ hr {
     cursor: pointer;
     transition: background 0.2s, transform 0.1s;
 }
-btn-deconnexion {
+#btn-deconnexion {
     width: 55px;
     flex: 0 0 55px;
     background-color: #c0392b;
