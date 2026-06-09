@@ -65,7 +65,7 @@ jobs:
           rm -f twa-manifest.json
 
           echo "Initialisation d'un nouveau projet Bubblewrap propre..."
-          bubblewrap init --manifestUrl="$URL_APP" --packageId="$ID_PACKAGE" --appVersionName=1.0.0 --appVersionCode=1 --display=standalone --yes
+          bubblewrap init --manifest="$URL_APP" --packageId="$ID_PACKAGE" --appVersionName=1.0.0 --appVersionCode=1 --display=standalone --yes
 
           # 3. Lancement du build final
           if [ -f release-keystore.jks ]; then
