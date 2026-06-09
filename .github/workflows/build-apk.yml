@@ -31,7 +31,7 @@ jobs:
           api-levels: '33'
           components: 'platform-tools,build-tools;33.0.2'
 
-       #Tarer et installer Bubblewrap proprement
+      # Installer Bubblewrap proprement
       - name: Install Bubblewrap
         run: npm install -g @bubblewrap/cli
 
