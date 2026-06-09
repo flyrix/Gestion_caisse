@@ -25,12 +25,6 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Setup Android SDK
-        uses: r0adkll/setup-android@v3
-        with:
-          api-levels: '33'
-          components: 'platform-tools,build-tools;33.0.2'
-
       # Installer Bubblewrap proprement
       - name: Install Bubblewrap
         run: npm install -g @bubblewrap/cli
