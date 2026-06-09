@@ -68,10 +68,7 @@
             <ul id="affichage-monnaies"></ul>
         </section>
     </div>
-
-    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
-
-    <script src="scripts/supabase-config.js"></script>
+<script src="scripts/supabase-config.js"></script>
     <script src="scripts/supabase.js"></script>
     <script src="scripts/db.js"></script>
 
@@ -80,13 +77,10 @@
     <script>
         (async () => {
             try {
-                // On attend que la session soit récupérée proprement via notre module unifié
                 const session = await Auth.getSession();
                 if (!session) {
-                    // Si aucune session n'existe, on redirige vers l'accueil (index.html)
                     window.location.href = './index.html';
                 } else {
-                    // Si connecté, on affiche la barre utilisateur et son email
                     const authBar = document.querySelector('#auth-bar');
                     const userEmailField = document.querySelector('#user-email');
                     if (authBar) authBar.hidden = false;
@@ -99,7 +93,7 @@
         })();
     </script>
 
-    <script src="scripts/script.js"></script>
+    <script src="scripts/script.js?v=1.0.2"></script>
 
     <script>
         if ('serviceWorker' in navigator) {
