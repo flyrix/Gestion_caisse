@@ -30,7 +30,7 @@ window.addEventListener('load', async () => {
         await SupabaseDB.init();
         const session = await SupabaseDB.getSession();
         if (!session) {
-            window.location.href = 'auth.html';
+            window.location.href = 'index.html';
             return;
         }
 
@@ -47,7 +47,7 @@ window.addEventListener('load', async () => {
                     realtimeChannel = null;
                 }
                 await Auth.signOut();
-                window.location.href = 'auth.html';
+                window.location.href = 'index.html';
             });
         }
 
@@ -94,7 +94,7 @@ window.addEventListener('load', async () => {
     } catch (err) {
         console.warn('Init error', err);
         if (!currentUser) {
-            window.location.href = 'auth.html';
+            window.location.href = 'index.html';
             return;
         }
     } finally {
