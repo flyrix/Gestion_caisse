@@ -46,7 +46,7 @@ jobs:
         run: |
           echo "$MY_KEYSTORE_SECRET" | base64 --decode > release-keystore.jks
           echo "Keystore restauré avec succès."
-# Initialisation blindée par arguments et compilation
+
       - name: Run Build TWA Script
         run: |
           # 1. Configuration des chemins pour Bubblewrap
@@ -56,28 +56,64 @@ jobs:
           # 2. Acceptation automatique des licences Android
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
 
-          URL_APP="https://celadon-sprite-c23deb.netlify.app/manifest.json"
+          URL_APP="https://celadon-sprite-c23deb.netlify.app"
           ID_PACKAGE="com.kacou.gestioncaisse"
           DOMAINE_PROD="celadon-sprite-c23deb.netlify.app"
 
           # 3. Nettoyage radical
-          rm -f twa-manifest.json twa-crypto-checksums.json
-          rm -rf build output android_project
+          rm -rf build output android_project twa-manifest.json
 
-          # 4. INITIALISATION ULTRA-FORCEE (On sature Bubblewrap d'arguments pour bloquer les questions)
-          echo "Initialisation du projet Bubblewrap avec injection des domaines..."
-          bubblewrap init --manifest="$URL_APP" \
-                          --packageId="$ID_PACKAGE" \
-                          --domain="$DOMAINE_PROD" \
-                          --host="$DOMAINE_PROD" \
-                          --appVersionName="1.0.0" \
-                          --appVersionCode=1 \
-                          --display=standalone \
-                          --orientation=default \
-                          --sc bowling \
-                          --yes
+          # 4. GÉNÉRATION DIRECTE DU twa-manifest.json (bypass total de bubblewrap init)
+          cat > twa-manifest.json << EOF
+          {
+            "packageId": "$ID_PACKAGE",
+            "host": "$DOMAINE_PROD",
+            "name": "Gestion de Caisse",
+            "launcherName": "GestionCaisse",
+            "display": "standalone",
+            "orientation": "default",
+            "themeColor": "#FFFFFF",
+            "navigationColor": "#000000",
+            "navigationColorDark": "#000000",
+            "navigationDividerColor": "#000000",
+            "navigationDividerColorDark": "#000000",
+            "backgroundColor": "#FFFFFF",
+            "enableNotifications": false,
+            "startUrl": "/",
+            "iconUrl": "$URL_APP/icons/icon-512x512.png",
+            "maskableIconUrl": "$URL_APP/icons/icon-512x512.png",
+            "monochromeIconUrl": "$URL_APP/icons/icon-512x512.png",
+            "appVersion": "1.0.0",
+            "appVersionCode": 1,
+            "signingKey": {
+              "path": "release-keystore.jks",
+              "alias": "release"
+            },
+            "additionalTrustedOrigins": [],
+            "retainedBundles": [],
+            "enableSiteSettingsShortcut": true,
+            "isChromeOSOnly": false,
+            "isMetaQuest": false,
+            "fullScopeUrl": "$URL_APP/",
+            "minSdkVersion": 19,
+            "fingerprints": [],
+            "serviceAccountJsonFile": "",
+            "features": {},
+            "alphaDependencies": {
+              "enabled": false
+            },
+            "generatorApp": "bubblewrap-cli",
+            "webManifestUrl": "$URL_APP/manifest.json",
+            "fallbackType": "customtabs",
+            "splashScreenFadeOutDuration": 300,
+            "shortcutItems": []
+          }
+          EOF
 
-          # 5. COMPILATION DE L'APK
+          echo "twa-manifest.json généré avec succès."
+          cat twa-manifest.json
+
+          # 5. COMPILATION DE L'APK (bubblewrap build lit twa-manifest.json directement)
           echo "Lancement de la compilation Gradle..."
           if [ -f release-keystore.jks ]; then
             echo "Building Release APK signée..."
