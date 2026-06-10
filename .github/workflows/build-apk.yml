@@ -52,6 +52,8 @@ jobs:
           export ID_PACKAGE="com.kacou.gestioncaisse"
           export DOMAINE="celadon-sprite-c23deb.netlify.app"
           export ALIAS="${KEY_ALIAS:-release}"
+          # 🟢 Sauvegarde du chemin absolu du Keystore
+          export KEYSTORE_ABSOLUTE_PATH="$(pwd)/release-keystore.jks"
 
           rm -rf build output android_project twa-manifest.json twa-crypto-checksums.json
 
@@ -65,7 +67,7 @@ jobs:
           [[ "$ICON_URL" != http* ]] && export ICON_URL="$URL_APP/$ICON_URL"
           echo "Icône : $ICON_URL"
 
-          # Génération des fichiers de configuration sans faille d'indentation
+          # Génération des fichiers avec injection du chemin absolu du keystore
           python3 << 'PYEOF'
           import json, os, hashlib
           
@@ -91,20 +93,18 @@ jobs:
               "appVersionName": "1.0.0",
               "appVersionCode": int(os.environ.get("RUN_NUMBER", "1")),
               "signingKey": {
-                  "path": "release-keystore.jks",
+                  "path": os.environ["KEYSTORE_ABSOLUTE_PATH"],  # 🟢 Chemin absolu injecté ici
                   "alias": os.environ["ALIAS"]
               },
               "additionalTrustedOrigins": [],
               "retainedBundles": [],
               "enableSiteSettingsShortcut": True,
-              # ... (haut du dictionnaire manifest identique)
               "isChromeOSOnly": False,
               "isMetaQuest": False,
-             "fullScopeUrl": os.environ["URL_APP"] + "/",
-             "minSdkVersion": 21,  
+              "fullScopeUrl": os.environ["URL_APP"] + "/",
+              "minSdkVersion": 21,
               "fingerprints": [],
               "generatorApp": "bubblewrap-cli",
-              # ... (reste du script identique)
               "webManifestUrl": os.environ["URL_APP"] + "/manifest.json",
               "fallbackType": "customtabs",
               "splashScreenFadeOutDuration": 300,
@@ -113,11 +113,9 @@ jobs:
               "alphaDependencies": {"enabled": False}
           }
           
-          # Écriture propre du manifeste
           with open("twa-manifest.json", "w") as f:
               json.dump(manifest, f, indent=2)
           
-          # Calcul MD5 et écriture du checksum pour valider l'état initial
           with open("twa-manifest.json", "rb") as f:
               md5 = hashlib.md5(f.read()).hexdigest()
           
@@ -125,40 +123,33 @@ jobs:
           with open("twa-crypto-checksums.json", "w") as f:
               json.dump(checksums, f, indent=2)
 
-          print("twa-manifest.json et twa-crypto-checksums.json générés avec succès.")
+          print("Configuration générée avec le chemin absolu du keystore.")
           PYEOF
 
-          echo "=== Vérification des fichiers ==="
+          echo "=== Structure twa-manifest.json ==="
           cat twa-manifest.json
-          # Initialisation de la structure Android native avec injection des entrées
-          echo "Initialisation de la structure Android native..."
+
+          # Initialisation de la structure Android native
+          echo "Initialisation de la structure Android..."
           printf "1.0.0\n1\ny\n" | bubblewrap update --yes || true
 
-          # L'ASTUCE : On duplique de force le keystore dans les sous-dossiers générés
-          if [ -f release-keystore.jks ]; then
-            echo "Duplication du fichier keystore pour apksigner..."
-            cp release-keystore.jks ./android_project/ 2>/dev/null || true
-            cp release-keystore.jks ./app/ 2>/dev/null || true
-          fi
-
-          # Compilation finale de l'APK
-          # On sature l'environnement avec les mots de passe attendus par Bubblewrap et Gradle
+          # 🟢 Injection des variables d'environnement globales pour le build binaire
           export BUBBLEWRAP_KEYSTORE_PASSWORD="$KEYSTORE_PASSWORD"
           export BUBBLEWRAP_KEY_PASSWORD="$KEYSTORE_PASSWORD"
 
           if [ -f release-keystore.jks ]; then
             echo ">>> Build Release APK signée..."
-            # On ne passe plus les mots de passe dans les flags pour forcer Bubblewrap à lire les variables exportées au-dessus
             bubblewrap build \
-              --keystorePath="release-keystore.jks" \
+              --keystorePath="$KEYSTORE_ABSOLUTE_PATH" \
+              --keystorePassword="$KEYSTORE_PASSWORD" \
               --keyAlias="$ALIAS" \
+              --keyPassword="$KEYSTORE_PASSWORD" \
               --skipUpdateCheck \
               --yes
           else
             echo ">>> Build Debug APK..."
             bubblewrap build --debug --skipUpdateCheck --yes
           fi
-
       - name: Find built APK
         id: find_apk
         run: |
