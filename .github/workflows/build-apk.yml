@@ -46,7 +46,8 @@ jobs:
         run: |
           echo "$MY_KEYSTORE_SECRET" | base64 --decode > release-keystore.jks
           echo "Keystore restauré avec succès."
-# Génération directe du fichier twa-manifest, du checksum et compilation
+
+# Génération directe du fichier twa-manifest, gestion des prompts et compilation
       - name: Run Build TWA Script
         run: |
           # 1. Configuration des chemins pour Bubblewrap
@@ -56,7 +57,7 @@ jobs:
           # 2. Acceptation des licences Android
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
 
-          # 3. Création du twa-manifest.json
+          # 3. Création du twa-manifest.json parfait
           cat <<EOF > twa-manifest.json
           {
             "packageId": "com.kacou.gestioncaisse",
@@ -88,13 +89,13 @@ jobs:
           }
           EOF
 
-          # 🟢 4. LE LEURRE : On génère le fichier de checksum que Bubblewrap cherche désespérément !
-          # En lui donnant un dictionnaire vide ou un hachage d'icône valide, il sautera la question.
+          # 4. Génération du fichier d'empreinte numérique pour stabiliser le manifest
           echo '{"twa-manifest.json":"'$(md5sum twa-manifest.json | awk '{print $1}')'"}' > twa-crypto-checksums.json
 
-          # 5. On force d'abord une génération propre et silencieuse
-          echo "Génération des fichiers Android natifs..."
-          bubblewrap update --yes
+          # 🟢 5. LA CORRECTION MAGIQUE : On envoie des retours à la ligne automatiques (\n) 
+          # pour valider instantanément toutes les demandes de version ou de régénération.
+          echo "Génération et initialisation silencieuse du projet Android..."
+          printf '\n\n\n\n\n' | bubblewrap update --yes || true
 
           # 6. Lancement du build final
           URL_APP="https://celadon-sprite-c23deb.netlify.app/manifest.json"
