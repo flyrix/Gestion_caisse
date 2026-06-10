@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - main
-  workflow_dispatch: # Permet aussi de lancer le build manuellement au besoin
+  workflow_dispatch:
 
 jobs:
   build:
@@ -18,56 +18,64 @@ jobs:
         with:
           node-version: '20'
 
-      # Java 17 Temurin : Recommandé pour éviter les crashs de Bubblewrap
       - name: Setup Java 17
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      # 🟢 ÉTAPE CLÉ : On installe un SDK Android tout propre et complet
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      # Installer Bubblewrap proprement
       - name: Install Bubblewrap
         run: npm install -g @bubblewrap/cli
 
-      - name: Rendre les scripts exécutables
-        run: |
-          chmod +x ./scripts/build_twa.sh
-          if [ -f ./scripts/sign_apk.sh ]; then chmod +x ./scripts/sign_apk.sh; fi
-
-      # Restauration sécurisée de ton fichier keystore binaire
       - name: Restore keystore from secret
         env:
           MY_KEYSTORE_SECRET: ${{ secrets.KEYSTORE_BASE64 }}
         if: ${{ env.MY_KEYSTORE_SECRET != '' }}
         run: |
           echo "$MY_KEYSTORE_SECRET" | base64 --decode > release-keystore.jks
-          echo "Keystore restauré avec succès."
+          echo "Keystore restauré."
 
-      - name: Run Build TWA Script
+      - name: Build TWA (no interactive init)
+        env:
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
         run: |
-          # 1. Configuration des chemins pour Bubblewrap
+          # --- Chemins Bubblewrap ---
           mkdir -p ~/.bubblewrap
           echo '{"jdkPath":"'"$JAVA_HOME"'","androidSdkPath":"'"$ANDROID_HOME"'"}' > ~/.bubblewrap/config.json
-          
-          # 2. Acceptation automatique des licences Android
+
+          # --- Licences Android ---
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
 
+          # --- Variables ---
           URL_APP="https://celadon-sprite-c23deb.netlify.app"
           ID_PACKAGE="com.kacou.gestioncaisse"
-          DOMAINE_PROD="celadon-sprite-c23deb.netlify.app"
+          DOMAINE="celadon-sprite-c23deb.netlify.app"
+          ALIAS="${KEY_ALIAS:-release}"
 
-          # 3. Nettoyage radical
+          # --- Nettoyage ---
           rm -rf build output android_project twa-manifest.json
 
-          # 4. GÉNÉRATION DIRECTE DU twa-manifest.json (bypass total de bubblewrap init)
-          cat > twa-manifest.json << EOF
+          # --- Récupération des icônes depuis le manifest PWA ---
+          ICON_URL=$(curl -s "$URL_APP/manifest.json" | python3 -c "
+          import json,sys
+          m=json.load(sys.stdin)
+          icons=m.get('icons',[])
+          big=[i for i in icons if '512' in i.get('sizes','')]
+          print((big or icons)[0]['src'] if icons else '/icons/icon-512x512.png')
+          ")
+          # Rendre l'URL absolue si relative
+          [[ "$ICON_URL" != http* ]] && ICON_URL="$URL_APP/$ICON_URL"
+          echo "Icône détectée : $ICON_URL"
+
+          # --- Génération directe du twa-manifest.json (bypass bubblewrap init) ---
+          cat > twa-manifest.json << MANIFEST
           {
             "packageId": "$ID_PACKAGE",
-            "host": "$DOMAINE_PROD",
+            "host": "$DOMAINE",
             "name": "Gestion de Caisse",
             "launcherName": "GestionCaisse",
             "display": "standalone",
@@ -80,14 +88,14 @@ jobs:
             "backgroundColor": "#FFFFFF",
             "enableNotifications": false,
             "startUrl": "/",
-            "iconUrl": "$URL_APP/icons/icon-512x512.png",
-            "maskableIconUrl": "$URL_APP/icons/icon-512x512.png",
-            "monochromeIconUrl": "$URL_APP/icons/icon-512x512.png",
+            "iconUrl": "$ICON_URL",
+            "maskableIconUrl": "$ICON_URL",
+            "monochromeIconUrl": "$ICON_URL",
             "appVersion": "1.0.0",
-            "appVersionCode": 1,
+            "appVersionCode": ${{ github.run_number }},
             "signingKey": {
               "path": "release-keystore.jks",
-              "alias": "release"
+              "alias": "$ALIAS"
             },
             "additionalTrustedOrigins": [],
             "retainedBundles": [],
@@ -97,81 +105,56 @@ jobs:
             "fullScopeUrl": "$URL_APP/",
             "minSdkVersion": 19,
             "fingerprints": [],
-            "serviceAccountJsonFile": "",
-            "features": {},
-            "alphaDependencies": {
-              "enabled": false
-            },
             "generatorApp": "bubblewrap-cli",
             "webManifestUrl": "$URL_APP/manifest.json",
             "fallbackType": "customtabs",
             "splashScreenFadeOutDuration": 300,
-            "shortcutItems": []
+            "shortcutItems": [],
+            "features": {},
+            "alphaDependencies": { "enabled": false }
           }
-          EOF
+          MANIFEST
 
-          echo "twa-manifest.json généré avec succès."
+          echo "=== twa-manifest.json généré ==="
           cat twa-manifest.json
 
-          # 5. COMPILATION DE L'APK (bubblewrap build lit twa-manifest.json directement)
-          echo "Lancement de la compilation Gradle..."
+          # --- Compilation ---
           if [ -f release-keystore.jks ]; then
-            echo "Building Release APK signée..."
-            bubblewrap build --keystorePath="release-keystore.jks" --yes
+            echo ">>> Build Release APK signée..."
+            bubblewrap build \
+              --keystorePath="$(pwd)/release-keystore.jks" \
+              --keystorePassword="$KEYSTORE_PASSWORD" \
+              --keyAlias="$ALIAS" \
+              --keyPassword="$KEYSTORE_PASSWORD" \
+              --yes
           else
-            echo "Building Debug APK..."
+            echo ">>> Build Debug APK..."
             bubblewrap build --debug --yes
           fi
-          
-      # Signature de l'APK (Validation via l'environnement pour éviter le blocage)
-      - name: Sign APK (optional)
-        env:
-          MY_KEYSTORE_SECRET: ${{ secrets.KEYSTORE_BASE64 }}
-          MY_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEYSTORE_PATH: release-keystore.jks
-          STOREPASS: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEYPASS: ${{ secrets.KEY_PASSWORD }}
-        if: ${{ env.MY_KEYSTORE_SECRET != '' && env.MY_KEY_ALIAS != '' }}
-        run: |
-          set -e
-          APK_PATH="$(ls build/*.apk 2>/dev/null || ls output/*.apk 2>/dev/null || true)"
-          if [ -z "$APK_PATH" ]; then 
-            echo "Erreur : Aucun APK généré par le build script !" && exit 1
-          fi
-          if [ -f ./scripts/sign_apk.sh ]; then
-            ./scripts/sign_apk.sh "$APK_PATH" "$KEYSTORE_PATH" "$MY_KEY_ALIAS" "$STOREPASS" "$KEYPASS"
-          else
-            echo "Script de signature introuvable, utilisation de l'APK de build."
-          fi
 
-      # Identification dynamique du fichier final (signé ou non) à publier
       - name: Find built APK
         id: find_apk
         run: |
-          FINAL_APK=$(ls signed-*.apk 2>/dev/null || find output build -type f -name "*.apk" | head -n1 || true)
+          FINAL_APK=$(find . -name "*.apk" | grep -v "\.gradle" | head -n1)
           if [ -z "$FINAL_APK" ]; then
-            echo "Erreur critique : Aucun fichier APK trouvé." && exit 1
+            echo "Erreur : Aucun APK trouvé." && exit 1
           fi
-          echo "APK Final identifié : $FINAL_APK"
+          echo "APK : $FINAL_APK"
           echo "APK_PATH=$FINAL_APK" >> $GITHUB_ENV
-          echo "APK_NAME=$(basename "$FINAL_APK")" >> $GITHUB_ENV
+          echo "APK_NAME=$(basename $FINAL_APK)" >> $GITHUB_ENV
 
-      # Sauvegarde de sécurité dans les artefacts GitHub
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: apk-files
           path: ${{ env.APK_PATH }}
 
-      # Remplacement des modules dépréciés par le standard actuel pour créer la Release
-      - name: Create GitHub Release and Upload APK
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.0.${{ github.run_number }}
           name: Build v1.0.${{ github.run_number }}
-          body: "Compilation automatisée de l'APK pour l'application Gestion de Caisse."
-          draft: false
-          prerelease: false
+          body: "APK automatisée — Gestion de Caisse"
           files: ${{ env.APK_PATH }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
