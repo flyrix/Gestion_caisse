@@ -47,7 +47,7 @@ jobs:
           echo "$MY_KEYSTORE_SECRET" | base64 --decode > release-keystore.jks
           echo "Keystore restauré avec succès."
 
-# Génération directe du fichier twa-manifest, gestion des prompts et compilation
+# Initialisation, génération et build de l'APK sans script externe
       - name: Run Build TWA Script
         run: |
           # 1. Configuration des chemins pour Bubblewrap
@@ -89,23 +89,23 @@ jobs:
           }
           EOF
 
-          # 4. Génération du fichier d'empreinte numérique pour stabiliser le manifest
+          # 4. Génération de l'empreinte pour stabiliser le manifest
           echo '{"twa-manifest.json":"'$(md5sum twa-manifest.json | awk '{print $1}')'"}' > twa-crypto-checksums.json
 
-          # 🟢 5. LA CORRECTION MAGIQUE : On envoie des retours à la ligne automatiques (\n) 
-          # pour valider instantanément toutes les demandes de version ou de régénération.
-          echo "Génération et initialisation silencieuse du projet Android..."
-          printf '\n\n\n\n\n' | bubblewrap update --yes || true
+          # 5. On force la génération initiale du projet Android en simulant les réponses
+          echo "Génération des fichiers Android..."
+          printf 'y\n1.0.0\n1\n' | bubblewrap update --yes || true
 
-          # 6. Lancement du build final
-          URL_APP="https://celadon-sprite-c23deb.netlify.app/manifest.json"
-          ID_PACKAGE="com.kacou.gestioncaisse"
-          
+          # 6. COMPILATION DIRECTE (On injecte la réponse 'y' si la question de régénération apparaît)
+          echo "Lancement de la compilation de l'APK..."
           if [ -f release-keystore.jks ]; then
-            ./scripts/build_twa.sh "$URL_APP" "$ID_PACKAGE" release-keystore.jks
+            echo "Compilation de la version Release signée..."
+            printf 'y\n' | bubblewrap build --keystorePath="release-keystore.jks" --yes
           else
-            ./scripts/build_twa.sh "$URL_APP" "$ID_PACKAGE"
+            echo "Compilation de la version Debug..."
+            printf 'y\n' | bubblewrap build --debug --yes
           fi
+          
       # Signature de l'APK (Validation via l'environnement pour éviter le blocage)
       - name: Sign APK (optional)
         env:
