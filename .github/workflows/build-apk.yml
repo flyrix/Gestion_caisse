@@ -130,23 +130,28 @@ jobs:
 
           echo "=== Vérification des fichiers ==="
           cat twa-manifest.json
-
-          # Initialisation forcée de la structure Android avec injection des entrées
+          # Initialisation de la structure Android native avec injection des entrées
           echo "Initialisation de la structure Android native..."
           printf "1.0.0\n1\ny\n" | bubblewrap update --yes || true
-          # --- Compilation finale de l'APK ---
-          # On injecte les variables globales de mot de passe lues par Bubblewrap
+
+          # L'ASTUCE : On duplique de force le keystore dans les sous-dossiers générés
+          if [ -f release-keystore.jks ]; then
+            echo "Duplication du fichier keystore pour apksigner..."
+            cp release-keystore.jks ./android_project/ 2>/dev/null || true
+            cp release-keystore.jks ./app/ 2>/dev/null || true
+          fi
+
+          # Compilation finale de l'APK
+          # On sature l'environnement avec les mots de passe attendus par Bubblewrap et Gradle
           export BUBBLEWRAP_KEYSTORE_PASSWORD="$KEYSTORE_PASSWORD"
           export BUBBLEWRAP_KEY_PASSWORD="$KEYSTORE_PASSWORD"
 
           if [ -f release-keystore.jks ]; then
             echo ">>> Build Release APK signée..."
-            # On passe les arguments complets en ligne de commande pour couper tout prompt
+            # On ne passe plus les mots de passe dans les flags pour forcer Bubblewrap à lire les variables exportées au-dessus
             bubblewrap build \
-              --keystorePath="$(pwd)/release-keystore.jks" \
-              --keystorePassword="$KEYSTORE_PASSWORD" \
+              --keystorePath="release-keystore.jks" \
               --keyAlias="$ALIAS" \
-              --keyPassword="$KEYSTORE_PASSWORD" \
               --skipUpdateCheck \
               --yes
           else
