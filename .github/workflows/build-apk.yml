@@ -132,11 +132,15 @@ jobs:
           # Initialisation forcée de la structure Android avec injection des entrées
           echo "Initialisation de la structure Android native..."
           printf "1.0.0\n1\ny\n" | bubblewrap update --yes || true
+          # --- Compilation finale de l'APK ---
+          # On injecte les variables globales de mot de passe lues par Bubblewrap
+          export BUBBLEWRAP_KEYSTORE_PASSWORD="$KEYSTORE_PASSWORD"
+          export BUBBLEWRAP_KEY_PASSWORD="$KEYSTORE_PASSWORD"
 
-          # Compilation finale de l'APK
           if [ -f release-keystore.jks ]; then
             echo ">>> Build Release APK signée..."
-            printf "1.0.0\n1\ny\n" | bubblewrap build \
+            # On passe les arguments complets en ligne de commande pour couper tout prompt
+            bubblewrap build \
               --keystorePath="$(pwd)/release-keystore.jks" \
               --keystorePassword="$KEYSTORE_PASSWORD" \
               --keyAlias="$ALIAS" \
@@ -145,7 +149,7 @@ jobs:
               --yes
           else
             echo ">>> Build Debug APK..."
-            printf "1.0.0\n1\ny\n" | bubblewrap build --debug --skipUpdateCheck --yes
+            bubblewrap build --debug --skipUpdateCheck --yes
           fi
 
       - name: Find built APK
