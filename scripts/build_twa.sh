@@ -60,7 +60,7 @@ cat > twa-manifest.json << MANIFEST
   "navigationColorDark": "#000000",
   "navigationDividerColor": "#000000",
   "navigationDividerColorDark": "#000000",
-  "backgroundColor": "#ffffff",
+  "backgroundColor": "#3498db",
   "enableNotifications": false,
   "startUrl": "/",
   "iconUrl": "$ICON_URL",
@@ -83,7 +83,7 @@ cat > twa-manifest.json << MANIFEST
   "generatorApp": "bubblewrap-cli",
   "webManifestUrl": "$MANIFEST_URL",
   "fallbackType": "customtabs",
-  "splashScreenFadeOutDuration": 300,
+  "splashScreenFadeOutDuration": 400,
   "shortcutItems": [],
   "features": {},
   "alphaDependencies": { "enabled": false }
