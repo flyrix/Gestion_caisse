@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.kacou.gestioncaisse",
+      "sha256_cert_fingerprints": [
+        "86:BE:9C:6D:2C:7F:8A:21:FC:94:73:E0:73:DF:1E:36:27:47:CD:DC:32:E7:40:1A:B4:B6:65:0E:C7:A3:F7:56"
+      ]
+    }
+  }
+]
