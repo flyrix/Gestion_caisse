@@ -97,12 +97,14 @@ jobs:
               "additionalTrustedOrigins": [],
               "retainedBundles": [],
               "enableSiteSettingsShortcut": True,
+              # ... (haut du dictionnaire manifest identique)
               "isChromeOSOnly": False,
               "isMetaQuest": False,
-              "fullScopeUrl": os.environ["URL_APP"] + "/",
-              "minSdkVersion": 19,
+             "fullScopeUrl": os.environ["URL_APP"] + "/",
+             "minSdkVersion": 21,  
               "fingerprints": [],
               "generatorApp": "bubblewrap-cli",
+              # ... (reste du script identique)
               "webManifestUrl": os.environ["URL_APP"] + "/manifest.json",
               "fallbackType": "customtabs",
               "splashScreenFadeOutDuration": 300,
