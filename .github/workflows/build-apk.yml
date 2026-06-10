@@ -33,123 +33,36 @@ jobs:
       - name: Restore keystore from secret
         env:
           MY_KEYSTORE_SECRET: ${{ secrets.KEYSTORE_BASE64 }}
-        if: ${{ env.MY_KEYSTORE_SECRET != '' }}
         run: |
+          if [ -z "$MY_KEYSTORE_SECRET" ]; then
+            echo "❌ ERREUR CRITIQUE : Le secret KEYSTORE_BASE64 est vide sur GitHub !"
+            exit 1
+          fi
           echo "$MY_KEYSTORE_SECRET" | base64 --decode > release-keystore.jks
-          echo "Keystore restauré."
+          echo "✅ Keystore restauré avec succès à la racine."
 
-      - name: Build TWA (no interactive init)
+      - name: Build TWA using script
         env:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          RUN_NUMBER: ${{ github.run_number }}
         run: |
           mkdir -p ~/.bubblewrap
           echo '{"jdkPath":"'"$JAVA_HOME"'","androidSdkPath":"'"$ANDROID_HOME"'"}' > ~/.bubblewrap/config.json
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
 
-          export URL_APP="https://celadon-sprite-c23deb.netlify.app"
-          export ID_PACKAGE="com.kacou.gestioncaisse"
-          export DOMAINE="celadon-sprite-c23deb.netlify.app"
-          export ALIAS="${KEY_ALIAS:-release}"
-          # 🟢 Sauvegarde du chemin absolu du Keystore
-          export KEYSTORE_ABSOLUTE_PATH="$(pwd)/release-keystore.jks"
-
-          rm -rf build output android_project twa-manifest.json twa-crypto-checksums.json
-
-          export ICON_URL=$(curl -s "$URL_APP/manifest.json" | python3 -c "
-          import json,sys
-          m=json.load(sys.stdin)
-          icons=m.get('icons',[])
-          big=[i for i in icons if '512' in i.get('sizes','')]
-          print((big or icons)[0]['src'] if icons else '/icons/icon-512x512.png')
-          ")
-          [[ "$ICON_URL" != http* ]] && export ICON_URL="$URL_APP/$ICON_URL"
-          echo "Icône : $ICON_URL"
-
-          # Génération des fichiers avec injection du chemin absolu du keystore
-          python3 << 'PYEOF'
-          import json, os, hashlib
+          # On rend le script exécutable et on le lance avec les variables
+          chmod +x ./scripts/build_twa.sh
           
-          manifest = {
-              "packageId": os.environ["ID_PACKAGE"],
-              "host": os.environ["DOMAINE"],
-              "name": "Gestion de Caisse",
-              "launcherName": "Caisse",
-              "displayName": "Gestion de Caisse",
-              "display": "standalone",
-              "orientation": "default",
-              "themeColor": "#3498db",
-              "navigationColor": "#000000",
-              "navigationColorDark": "#000000",
-              "navigationDividerColor": "#000000",
-              "navigationDividerColorDark": "#000000",
-              "backgroundColor": "#ffffff",
-              "enableNotifications": False,
-              "startUrl": "/",
-              "iconUrl": os.environ["ICON_URL"],
-              "maskableIconUrl": os.environ["ICON_URL"],
-              "monochromeIconUrl": os.environ["ICON_URL"],
-              "appVersionName": "1.0.0",
-              "appVersionCode": int(os.environ.get("RUN_NUMBER", "1")),
-              "signingKey": {
-                  "path": os.environ["KEYSTORE_ABSOLUTE_PATH"],  # 🟢 Chemin absolu injecté ici
-                  "alias": os.environ["ALIAS"]
-              },
-              "additionalTrustedOrigins": [],
-              "retainedBundles": [],
-              "enableSiteSettingsShortcut": True,
-              "isChromeOSOnly": False,
-              "isMetaQuest": False,
-              "fullScopeUrl": os.environ["URL_APP"] + "/",
-              "minSdkVersion": 21,
-              "fingerprints": [],
-              "generatorApp": "bubblewrap-cli",
-              "webManifestUrl": os.environ["URL_APP"] + "/manifest.json",
-              "fallbackType": "customtabs",
-              "splashScreenFadeOutDuration": 300,
-              "shortcutItems": [],
-              "features": {},
-              "alphaDependencies": {"enabled": False}
-          }
-          
-          with open("twa-manifest.json", "w") as f:
-              json.dump(manifest, f, indent=2)
-          
-          with open("twa-manifest.json", "rb") as f:
-              md5 = hashlib.md5(f.read()).hexdigest()
-          
-          checksums = {"twa-manifest.json": md5}
-          with open("twa-crypto-checksums.json", "w") as f:
-              json.dump(checksums, f, indent=2)
-
-          print("Configuration générée avec le chemin absolu du keystore.")
-          PYEOF
-
-          echo "=== Structure twa-manifest.json ==="
-          cat twa-manifest.json
-
-          # Initialisation de la structure Android native
-          echo "Initialisation de la structure Android..."
-          printf "1.0.0\n1\ny\n" | bubblewrap update --yes || true
-
-          # 🟢 Injection des variables d'environnement globales pour le build binaire
           export BUBBLEWRAP_KEYSTORE_PASSWORD="$KEYSTORE_PASSWORD"
           export BUBBLEWRAP_KEY_PASSWORD="$KEYSTORE_PASSWORD"
 
-          if [ -f release-keystore.jks ]; then
-            echo ">>> Build Release APK signée..."
-            bubblewrap build \
-              --keystorePath="$KEYSTORE_ABSOLUTE_PATH" \
-              --keystorePassword="$KEYSTORE_PASSWORD" \
-              --keyAlias="$ALIAS" \
-              --keyPassword="$KEYSTORE_PASSWORD" \
-              --skipUpdateCheck \
-              --yes
-          else
-            echo ">>> Build Debug APK..."
-            bubblewrap build --debug --skipUpdateCheck --yes
-          fi
+          ./scripts/build_twa.sh \
+            "https://celadon-sprite-c23deb.netlify.app/manifest.json" \
+            "com.kacou.gestioncaisse" \
+            "release-keystore.jks" \
+            "$KEYSTORE_PASSWORD" \
+            "${KEY_ALIAS:-release}"
+
       - name: Find built APK
         id: find_apk
         run: |
