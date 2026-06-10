@@ -46,11 +46,8 @@ jobs:
         run: |
           echo "$MY_KEYSTORE_SECRET" | base64 --decode > release-keystore.jks
           echo "Keystore restauré avec succès."
-
-# Initialisation et compilation forcée en mode CI non-interactif
+# Initialisation blindée par arguments et compilation
       - name: Run Build TWA Script
-        env:
-          CI: true # Force de nombreux modules Node.js à couper le mode interactif
         run: |
           # 1. Configuration des chemins pour Bubblewrap
           mkdir -p ~/.bubblewrap
@@ -61,15 +58,18 @@ jobs:
 
           URL_APP="https://celadon-sprite-c23deb.netlify.app/manifest.json"
           ID_PACKAGE="com.kacou.gestioncaisse"
+          DOMAINE_PROD="celadon-sprite-c23deb.netlify.app"
 
-          # 3. SÉCURITÉ : On nettoie tout résidu pour partir sur du 100% propre
+          # 3. Nettoyage radical
           rm -f twa-manifest.json twa-crypto-checksums.json
           rm -rf build output android_project
 
-          # 4. INITIALISATION SANS QUESTION (On passe directement les arguments clés)
-          echo "Initialisation du projet Bubblewrap..."
+          # 4. INITIALISATION ULTRA-FORCEE (On sature Bubblewrap d'arguments pour bloquer les questions)
+          echo "Initialisation du projet Bubblewrap avec injection des domaines..."
           bubblewrap init --manifest="$URL_APP" \
                           --packageId="$ID_PACKAGE" \
+                          --domain="$DOMAINE_PROD" \
+                          --host="$DOMAINE_PROD" \
                           --appVersionName="1.0.0" \
                           --appVersionCode=1 \
                           --display=standalone \
@@ -86,7 +86,7 @@ jobs:
             echo "Building Debug APK..."
             bubblewrap build --debug --yes
           fi
-
+          
       # Signature de l'APK (Validation via l'environnement pour éviter le blocage)
       - name: Sign APK (optional)
         env:
