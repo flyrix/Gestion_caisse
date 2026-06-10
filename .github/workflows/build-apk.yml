@@ -42,84 +42,90 @@ jobs:
         env:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          RUN_NUMBER: ${{ github.run_number }}
         run: |
-          # --- Chemins Bubblewrap ---
           mkdir -p ~/.bubblewrap
           echo '{"jdkPath":"'"$JAVA_HOME"'","androidSdkPath":"'"$ANDROID_HOME"'"}' > ~/.bubblewrap/config.json
-
-          # --- Licences Android ---
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
 
-          # --- Variables ---
-          URL_APP="https://celadon-sprite-c23deb.netlify.app"
-          ID_PACKAGE="com.kacou.gestioncaisse"
-          DOMAINE="celadon-sprite-c23deb.netlify.app"
-          ALIAS="${KEY_ALIAS:-release}"
+          export URL_APP="https://celadon-sprite-c23deb.netlify.app"
+          export ID_PACKAGE="com.kacou.gestioncaisse"
+          export DOMAINE="celadon-sprite-c23deb.netlify.app"
+          export ALIAS="${KEY_ALIAS:-release}"
 
-          # --- Nettoyage ---
           rm -rf build output android_project twa-manifest.json twa-crypto-checksums.json
 
-          # --- Récupération des icônes depuis le manifest PWA ---
-          ICON_URL=$(curl -s "$URL_APP/manifest.json" | python3 -c "
+          export ICON_URL=$(curl -s "$URL_APP/manifest.json" | python3 -c "
           import json,sys
           m=json.load(sys.stdin)
           icons=m.get('icons',[])
           big=[i for i in icons if '512' in i.get('sizes','')]
           print((big or icons)[0]['src'] if icons else '/icons/icon-512x512.png')
           ")
-          [[ "$ICON_URL" != http* ]] && ICON_URL="$URL_APP/$ICON_URL"
-          echo "Icône détectée : $ICON_URL"
+          [[ "$ICON_URL" != http* ]] && export ICON_URL="$URL_APP/$ICON_URL"
+          echo "Icône : $ICON_URL"
 
-          # --- Génération directe du twa-manifest.json parfait ---
-          cat > twa-manifest.json << MANIFEST
-          {
-            "packageId": "$ID_PACKAGE",
-            "host": "$DOMAINE",
-            "name": "Gestion de Caisse",
-            "launcherName": "Caisse",
-            "displayName": "Gestion de Caisse",
-            "themeColor": "#3498db",
-            "navigationColor": "#000000",
-            "backgroundColor": "#ffffff",
-            "startUrl": "/",
-            "iconUrl": "$ICON_URL",
-            "maskableIconUrl": "$ICON_URL",
-            "appVersionName": "1.0.0",
-            "appVersionCode": ${{ github.run_number }},
-            "signingKey": {
-              "path": "release-keystore.jks",
-              "alias": "$ALIAS"
-            },
-            "generatorApp": "bubblewrap-cli",
-            "webManifestUrl": "$URL_APP/manifest.json",
-            "fallbackType": "customtabs",
-            "alphaDependencies": { "enabled": false }
-          }
-          MANIFEST
+          python3 << PYEOF
+          import json, os
+          manifest = {
+          "packageId": os.environ["ID_PACKAGE"],
+          "host": os.environ["DOMAINE"],
+          "name": "Gestion de Caisse",
+          "launcherName": "Caisse",
+          "displayName": "Gestion de Caisse",
+          "display": "standalone",
+          "orientation": "default",
+          "themeColor": "#3498db",
+          "navigationColor": "#000000",
+          "navigationColorDark": "#000000",
+          "navigationDividerColor": "#000000",
+          "navigationDividerColorDark": "#000000",
+          "backgroundColor": "#ffffff",
+          "enableNotifications": False,
+          "startUrl": "/",
+          "iconUrl": os.environ["ICON_URL"],
+          "maskableIconUrl": os.environ["ICON_URL"],
+          "monochromeIconUrl": os.environ["ICON_URL"],
+          "appVersion": "1.0.0",
+          "appVersionName": "1.0.0",
+          "appVersionCode": int(os.environ.get("RUN_NUMBER", "1")),
+          "signingKey": {
+          "path": "release-keystore.jks",
+          "alias": os.environ["ALIAS"]
+          },
+          "additionalTrustedOrigins": [],
+          "retainedBundles": [],
+          "enableSiteSettingsShortcut": True,
+          "isChromeOSOnly": False,
+          "isMetaQuest": False,
+          "fullScopeUrl": os.environ["URL_APP"] + "/",
+          "minSdkVersion": 19,
+          "fingerprints": [],
+          "generatorApp": "bubblewrap-cli",
+          "webManifestUrl": os.environ["URL_APP"] + "/manifest.json",
+          "fallbackType": "customtabs",
+          "splashScreenFadeOutDuration": 300,
+          "shortcutItems": [],
+          "features": {},
+          "alphaDependencies": {"enabled": False}
+            }
+          with open("twa-manifest.json", "w") as f:
+          json.dump(manifest, f, indent=2)
+          print("twa-manifest.json généré.")
+          PYEOF
 
-          # 🟢 L'ÉTAPE CRUCIALE POUR SANS-PROMPT :
-          # On crée artificiellement le fichier de hachage attendu pour que Bubblewrap 
-          # s'imagine que le projet est sain et déjà initialisé par le passé.
-          echo "Génération du leurre de validation..."
-          echo '{"twa-manifest.json":"'$(md5sum twa-manifest.json | awk '{print $1}')'"}' > twa-crypto-checksums.json
+          echo "=== twa-manifest.json ==="
+          cat twa-manifest.json
 
-          # 🟢 ON FORCE LA CRÉATION DES DOSSIERS SOURCE ANDROID SANS DEMANDER
-          echo "Création de la structure Android native..."
-          bubblewrap update --yes
-
-          # --- Compilation finale ---
           if [ -f release-keystore.jks ]; then
-            echo ">>> Build Release APK signée..."
             bubblewrap build \
               --keystorePath="$(pwd)/release-keystore.jks" \
               --keystorePassword="$KEYSTORE_PASSWORD" \
               --keyAlias="$ALIAS" \
               --keyPassword="$KEYSTORE_PASSWORD" \
-              --skipUpdateCheck \
               --yes
           else
-            echo ">>> Build Debug APK..."
-            bubblewrap build --debug --skipUpdateCheck --yes
+            bubblewrap build --debug --yes
           fi
 
       - name: Find built APK
