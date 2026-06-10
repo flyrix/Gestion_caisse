@@ -100,23 +100,22 @@ fi
 # --- Génération silencieuse de la structure Android ---
 echo "Création de la structure Android native..."
 printf "1.0.0\n1\ny\n" | bubblewrap update --yes || true
-
-# --- Compilation avec injection des mots de passe ---
+# --- Compilation et Signature Optimisée Android ---
 if [ -n "$ABS_KEYSTORE_PATH" ] && [ -f "$ABS_KEYSTORE_PATH" ]; then
-  echo "Building release APK avec keystore : $ABS_KEYSTORE_PATH"
+  echo "Building release APK optimisée et signée..."
   
-  # Export des variables pour court-circuiter les questions de mot de passe
+  # 🟢 ÉTAPE CLÉ : On injecte TOUTES les configurations directement dans l'environnement
   export BUBBLEWRAP_KEYSTORE_PASSWORD="$KEYSTORE_PASSWORD"
   export BUBBLEWRAP_KEY_PASSWORD="$KEYSTORE_PASSWORD"
 
-  bubblewrap build \
-    --keystorePath="$ABS_KEYSTORE_PATH" \
-    --keyAlias="$KEY_ALIAS" \
-    --skipUpdateCheck \
-    --yes
+  # On laisse Bubblewrap lire le twa-manifest.json de manière standard.
+  # L'argument --yes valide automatiquement, mais l'absence de flags forcés
+  # oblige Bubblewrap à exécuter le cycle complet : Build -> ZipAlign -> APKSigner V2/V3.
+  bubblewrap build --yes
+
 else
   echo "Building debug APK (pas de keystore valide fourni)."
   bubblewrap build --debug --skipUpdateCheck --yes
 fi
 
-echo "Build terminé. APK disponible !"
+echo "Build terminé avec succès !"
