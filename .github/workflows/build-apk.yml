@@ -65,67 +65,87 @@ jobs:
           [[ "$ICON_URL" != http* ]] && export ICON_URL="$URL_APP/$ICON_URL"
           echo "Icône : $ICON_URL"
 
-          python3 << PYEOF
-          import json, os
+          # Génération des fichiers de configuration sans faille d'indentation
+          python3 << 'PYEOF'
+          import json, os, hashlib
+          
           manifest = {
-          "packageId": os.environ["ID_PACKAGE"],
-          "host": os.environ["DOMAINE"],
-          "name": "Gestion de Caisse",
-          "launcherName": "Caisse",
-          "displayName": "Gestion de Caisse",
-          "display": "standalone",
-          "orientation": "default",
-          "themeColor": "#3498db",
-          "navigationColor": "#000000",
-          "navigationColorDark": "#000000",
-          "navigationDividerColor": "#000000",
-          "navigationDividerColorDark": "#000000",
-          "backgroundColor": "#ffffff",
-          "enableNotifications": False,
-          "startUrl": "/",
-          "iconUrl": os.environ["ICON_URL"],
-          "maskableIconUrl": os.environ["ICON_URL"],
-          "monochromeIconUrl": os.environ["ICON_URL"],
-          "appVersion": "1.0.0",
-          "appVersionName": "1.0.0",
-          "appVersionCode": int(os.environ.get("RUN_NUMBER", "1")),
-          "signingKey": {
-          "path": "release-keystore.jks",
-          "alias": os.environ["ALIAS"]
-          },
-          "additionalTrustedOrigins": [],
-          "retainedBundles": [],
-          "enableSiteSettingsShortcut": True,
-          "isChromeOSOnly": False,
-          "isMetaQuest": False,
-          "fullScopeUrl": os.environ["URL_APP"] + "/",
-          "minSdkVersion": 19,
-          "fingerprints": [],
-          "generatorApp": "bubblewrap-cli",
-          "webManifestUrl": os.environ["URL_APP"] + "/manifest.json",
-          "fallbackType": "customtabs",
-          "splashScreenFadeOutDuration": 300,
-          "shortcutItems": [],
-          "features": {},
-          "alphaDependencies": {"enabled": False}
-            }
+              "packageId": os.environ["ID_PACKAGE"],
+              "host": os.environ["DOMAINE"],
+              "name": "Gestion de Caisse",
+              "launcherName": "Caisse",
+              "displayName": "Gestion de Caisse",
+              "display": "standalone",
+              "orientation": "default",
+              "themeColor": "#3498db",
+              "navigationColor": "#000000",
+              "navigationColorDark": "#000000",
+              "navigationDividerColor": "#000000",
+              "navigationDividerColorDark": "#000000",
+              "backgroundColor": "#ffffff",
+              "enableNotifications": False,
+              "startUrl": "/",
+              "iconUrl": os.environ["ICON_URL"],
+              "maskableIconUrl": os.environ["ICON_URL"],
+              "monochromeIconUrl": os.environ["ICON_URL"],
+              "appVersionName": "1.0.0",
+              "appVersionCode": int(os.environ.get("RUN_NUMBER", "1")),
+              "signingKey": {
+                  "path": "release-keystore.jks",
+                  "alias": os.environ["ALIAS"]
+              },
+              "additionalTrustedOrigins": [],
+              "retainedBundles": [],
+              "enableSiteSettingsShortcut": True,
+              "isChromeOSOnly": False,
+              "isMetaQuest": False,
+              "fullScopeUrl": os.environ["URL_APP"] + "/",
+              "minSdkVersion": 19,
+              "fingerprints": [],
+              "generatorApp": "bubblewrap-cli",
+              "webManifestUrl": os.environ["URL_APP"] + "/manifest.json",
+              "fallbackType": "customtabs",
+              "splashScreenFadeOutDuration": 300,
+              "shortcutItems": [],
+              "features": {},
+              "alphaDependencies": {"enabled": False}
+          }
+          
+          # Écriture propre du manifeste
           with open("twa-manifest.json", "w") as f:
-          json.dump(manifest, f, indent=2)
-          print("twa-manifest.json généré.")
+              json.dump(manifest, f, indent=2)
+          
+          # Calcul MD5 et écriture du checksum pour valider l'état initial
+          with open("twa-manifest.json", "rb") as f:
+              md5 = hashlib.md5(f.read()).hexdigest()
+          
+          checksums = {"twa-manifest.json": md5}
+          with open("twa-crypto-checksums.json", "w") as f:
+              json.dump(checksums, f, indent=2)
+
+          print("twa-manifest.json et twa-crypto-checksums.json générés avec succès.")
           PYEOF
 
-          echo "=== twa-manifest.json ==="
+          echo "=== Vérification des fichiers ==="
           cat twa-manifest.json
 
+          # Initialisation forcée de la structure Android avec injection des entrées
+          echo "Initialisation de la structure Android native..."
+          printf "1.0.0\n1\ny\n" | bubblewrap update --yes || true
+
+          # Compilation finale de l'APK
           if [ -f release-keystore.jks ]; then
-            bubblewrap build \
+            echo ">>> Build Release APK signée..."
+            printf "1.0.0\n1\ny\n" | bubblewrap build \
               --keystorePath="$(pwd)/release-keystore.jks" \
               --keystorePassword="$KEYSTORE_PASSWORD" \
               --keyAlias="$ALIAS" \
               --keyPassword="$KEYSTORE_PASSWORD" \
+              --skipUpdateCheck \
               --yes
           else
-            bubblewrap build --debug --yes
+            echo ">>> Build Debug APK..."
+            printf "1.0.0\n1\ny\n" | bubblewrap build --debug --skipUpdateCheck --yes
           fi
 
       - name: Find built APK
