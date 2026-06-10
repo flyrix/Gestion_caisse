@@ -66,14 +66,16 @@ jobs:
       - name: Find built APK
         id: find_apk
         run: |
-          FINAL_APK=$(find . -name "*.apk" | grep -v "\.gradle" | head -n1)
-          if [ -z "$FINAL_APK" ]; then
-            echo "Erreur : Aucun APK trouvé." && exit 1
+          # 🟢 On cible directement le fichier final signé généré par Bubblewrap
+          FINAL_APK="./app-release-signed.apk"
+          
+          if [ ! -f "$FINAL_APK" ]; then
+            echo "Erreur : L'APK signée n'a pas été trouvée à la racine." && exit 1
           fi
-          echo "APK : $FINAL_APK"
+          echo "APK trouvée : $FINAL_APK"
           echo "APK_PATH=$FINAL_APK" >> $GITHUB_ENV
           echo "APK_NAME=$(basename $FINAL_APK)" >> $GITHUB_ENV
-
+          
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
