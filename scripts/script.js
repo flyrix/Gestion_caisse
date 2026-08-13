@@ -5,11 +5,11 @@ let currentUser = null;
 let realtimeChannel = null;
 
 // 2. Sélection des éléments du DOM
-const inputClient = document.querySelector('#client');
-const inputMonnaie = document.querySelector('#montant'); 
-const selectType = document.querySelector('#type');
-const ajouter = document.querySelector('#btn-ajouter');
-const btnMicro = document.querySelector('#btn-micro');
+const btnVocal = document.querySelector('#btn-vocal-main');
+const statusText = document.querySelector('#mic-status');
+const transcriptText = document.querySelector('#transcript-text');
+const aiResponse = document.querySelector('#ai-response');
+
 const btnLireTout = document.querySelector('#btn-lire-tout');
 const btnEffacerRegles = document.querySelector('#btn-effacer-regles');
 const btnDeconnexion = document.querySelector('#btn-deconnexion');
@@ -110,62 +110,104 @@ const parler = (texte) => {
     window.speechSynthesis.cancel(); 
     const message = new SpeechSynthesisUtterance(texte);
     message.lang = "fr-FR";
-    message.rate = 0.85; 
+    message.rate = 0.90; // Un peu plus lent pour la clarté
     window.speechSynthesis.speak(message);
 };
 
 // ==========================================
-// CONFIGURATION DU MICRO (RECONNAISSANCE)
+// ANALYSEUR LOCAL (IA Basique - NLU)
+// ==========================================
+function analyserPhrase(phrase) {
+    const p = phrase.toLowerCase();
+    
+    // 1. Chercher un montant (chiffres avec ou sans espaces)
+    const matchMontant = p.match(/(\d+[\d\s]*)/);
+    if (!matchMontant) {
+        return { erreur: "Je n'ai pas compris le montant." };
+    }
+    const montant = parseInt(matchMontant[0].replace(/\s/g, ''), 10);
+
+    // 2. Déterminer le type (Crédit vs Monnaie)
+    let type = 'credit'; 
+    if (p.includes('monnaie') || p.includes('je dois') || p.includes('rendre') || p.includes('rendu')) {
+        type = 'monnaie';
+    } else if (p.includes('doit') || p.includes('crédit') || p.includes('pris')) {
+        type = 'credit';
+    }
+
+    // 3. Trouver le nom (On supprime les mots de liaison)
+    const motsExclus = ['me', 'doit', 'je', 'lui', 'dois', 'donné', 'rendre', 'monnaie', 'francs', 'franc', 'fcfa', 'de', 'à', 'pour', 'crédit', 'le', 'la', 'les'];
+    const mots = p.replace(/[0-9]/g, '').split(/\s+/).filter(m => m.length > 2 && !motsExclus.includes(m));
+    
+    // Le premier mot restant pertinent est considéré comme le nom
+    let client = mots.length > 0 ? mots[0].charAt(0).toUpperCase() + mots[0].slice(1) : "Inconnu";
+
+    return { client, montant, type };
+}
+
+// ==========================================
+// CONFIGURATION DU MICRO (RECONNAISSANCE GLOBALE)
 // ==========================================
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
-if (SpeechRecognition) {
+if (SpeechRecognition && btnVocal) {
     const reconnaissance = new SpeechRecognition();
     reconnaissance.lang = "fr-FR";
     reconnaissance.interimResults = false;
 
-    btnMicro.addEventListener('click', () => {
-        parler("Dites le nom du client");
-        
-        setTimeout(() => {
-            btnMicro.style.backgroundColor = "#ff3b30"; 
+    btnVocal.addEventListener('click', () => {
+        try {
             reconnaissance.start();
-        }, 1200);
+        } catch(e) {
+            reconnaissance.stop();
+        }
     });
 
-    reconnaissance.onresult = (event) => {
-        const nomDicte = event.results[0][0].transcript;
-        inputClient.value = nomDicte; 
-        btnMicro.style.backgroundColor = "#2ecc71"; 
-        parler(`Nom enregistré : ${nomDicte}`);
+    reconnaissance.onstart = () => {
+        btnVocal.classList.add('recording');
+        statusText.textContent = "Je vous écoute...";
+        transcriptText.innerHTML = "<em>Parlez maintenant...</em>";
+        aiResponse.textContent = "";
+        aiResponse.className = "ai-status";
+    };
+
+    reconnaissance.onresult = async (event) => {
+        const phrase = event.results[0][0].transcript;
+        transcriptText.innerHTML = `<strong>Compris :</strong> "${phrase}"`;
+        
+        // Analyse de la phrase
+        const resultat = analyserPhrase(phrase);
+
+        if (resultat.erreur) {
+            aiResponse.textContent = `⚠️ ${resultat.erreur}`;
+            aiResponse.classList.add('ai-error');
+            parler(resultat.erreur);
+        } else {
+            // Si l'analyse est bonne, on enregistre
+            await enregistrerOperationVocal(resultat.client, resultat.montant, resultat.type);
+        }
     };
 
     reconnaissance.onerror = () => {
-        btnMicro.style.backgroundColor = "#2ecc71";
+        transcriptText.innerHTML = "<em>Je n'ai pas bien entendu.</em>";
+        aiResponse.textContent = "Veuillez réessayer.";
+        aiResponse.classList.add('ai-error');
         parler("Je n'ai pas bien entendu. Réessayez.");
     };
     
     reconnaissance.onend = () => {
-        btnMicro.style.backgroundColor = "#2ecc71";
+        btnVocal.classList.remove('recording');
+        statusText.textContent = "Appuyez et parlez";
     };
-} else {
-    btnMicro.style.display = "none";
+} else if (btnVocal) {
+    btnVocal.style.display = "none";
+    alert("Votre navigateur ne supporte pas la reconnaissance vocale.");
 }
 
 // ==========================================
-// ÉCOUTEUR DU CLIC POUR ENREGISTRER
+// ENREGISTREMENT EN BASE (Remplaçant l'ancien btn-ajouter)
 // ==========================================
-ajouter.addEventListener('click', async () => {
-    const nom = inputClient.value.trim();
-    const somme = Number(inputMonnaie.value);
-    const type = selectType.value;
-    
-    if (nom === "" || somme <= 0) { 
-        alert("Veuillez entrer un nom et un montant valide");
-        parler("Erreur. Veuillez vérifier le nom ou le montant.");
-        return;
-    }
-    
+async function enregistrerOperationVocal(nom, somme, type) {
     const maintenant = new Date().toISOString();
     const nouvelleOperation = {
         id: Date.now(), 
@@ -173,8 +215,8 @@ ajouter.addEventListener('click', async () => {
         montant: somme,
         paye: false,
         type: type,
-        createdat: maintenant, // 🟢 Remplacé par des minuscules pour s'aligner avec Supabase DB
-        createdAt: maintenant  // Sécurité pour la base locale IndexedDB
+        createdat: maintenant,
+        createdAt: maintenant 
     };
 
     try {
@@ -185,23 +227,25 @@ ajouter.addEventListener('click', async () => {
             SupabaseDB.saveOperation(nouvelleOperation, currentUser.id).catch(err => console.warn('Supabase save error', err));
         }
 
+        let messageConfirmation = "";
         if (type === 'credit') { 
             credits.push(nouvelleOperation);
-            parler(`Enregistré. ${nom} vous doit ${somme} francs.`);
+            messageConfirmation = `C'est noté. ${nom} vous doit ${somme} francs.`;
         } else {
             monnaies.push(nouvelleOperation);
-            parler(`Enregistré. Vous devez rendre ${somme} francs à ${nom}.`);
+            messageConfirmation = `C'est noté. Vous devez rendre ${somme} francs à ${nom}.`;
         }
 
-        inputClient.value = "";
-        inputMonnaie.value = "";
+        aiResponse.textContent = `✅ ${messageConfirmation}`;
+        parler(messageConfirmation);
         
         afficherListes();
     } catch (err) {
         console.warn('Erreur ajout operation', err);
-        alert('Erreur lors de l\'enregistrement');
+        aiResponse.textContent = "⚠️ Erreur lors de l'enregistrement";
+        parler("Erreur lors de l'enregistrement de l'opération.");
     }
-});
+}
 
 // ==========================================
 // FONCTIONS DE MISE À JOUR ET SUPPRESSION
@@ -274,9 +318,6 @@ function creerMessageVide(texte) {
     return item;
 }
 
-// ==========================================
-// 🟢 CRÉATION DU COMPOSANT GRAPHIQUE (CORRIGÉ AVEC DATE)
-// ==========================================
 function creerLigneOperation(element, type) {
     const item = document.createElement('li');
     item.className = element.paye ? 'operation reglee' : 'operation';
@@ -291,7 +332,6 @@ function creerLigneOperation(element, type) {
     const montant = document.createElement('strong');
     montant.textContent = formatMontant(element.montant);
 
-    // --- RESTRUCTURATION ET AJOUT DE LA DATE DE CRÉATION ---
     const dateSource = element.createdat || element.createdAt;
     let texteDate = "";
     if (dateSource) {
@@ -303,7 +343,6 @@ function creerLigneOperation(element, type) {
     const statut = document.createElement('span');
     statut.className = 'operation-statut';
     
-    // On combine l'état actuel (Réglé/En attente) et la date d'enregistrement
     const etatActuel = element.paye ? (type === 'credit' ? 'Réglé' : 'Rendu') : 'En attente';
     statut.textContent = `${etatActuel}${texteDate}`;
 

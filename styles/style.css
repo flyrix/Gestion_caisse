@@ -55,7 +55,6 @@ hr {
     margin-bottom: 20px;
 }
 
-/* Style forcé pour le bouton Se Déconnecter */
 #btn-deconnexion {
     background-color: #e74c3c ;
     color: white ;
@@ -72,75 +71,78 @@ hr {
     background-color: #160907;
 }
 
-/* --- STYLE DU FORMULAIRE --- */
-#formulaire {
+/* --- INTERFACE VOCALE INTELLIGENTE --- */
+.vocal-container {
     background: rgb(252, 250, 250);
-    padding: 20px;
+    padding: 30px 20px;
     border-radius: 12px;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 20px;
 }
 
-/* Alignement de l'input nom et du micro */
-.champ-vocal {
-    display: flex;
-    gap: 8px;
-    width: 100%;
-}
-
-.champ-vocal input {
-    flex: 1;
-    min-width: 0;
-}
-
-#formulaire input, #formulaire select {
-    width: 100%;
-    padding: 12px;
-    border: 1px solid #ccc;
-    border-radius: 8px;
-    font-size: 16px;
-    outline: none;
-    transition: border-color 0.2s;
-}
-
-#formulaire input:focus, #formulaire select:focus {
-    border-color: #3498db;
-}
-
-/* Bouton Micro */
-#btn-micro {
-    width: 55px;
-    flex: 0 0 55px;
-    background-color: #2ecc71;
-    color: white;
-    border: none;
-    border-radius: 8px;
-    font-size: 20px;
-    cursor: pointer;
-    transition: background 0.2s, transform 0.1s;
-}
-
-#btn-micro:active {
-    transform: scale(0.95);
-}
-
-/* Bouton Enregistrer */
-#btn-ajouter {
+.mic-button {
+    width: 130px;
+    height: 130px;
+    border-radius: 50%;
     background-color: #3498db;
+    border: 4px solid #2980b9;
     color: white;
-    border: none;
-    padding: 14px;
-    font-size: 16px;
-    font-weight: bold;
-    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
     cursor: pointer;
-    transition: background 0.2s;
+    box-shadow: 0 8px 15px rgba(0,0,0,0.2);
+    transition: all 0.3s ease;
 }
 
-#btn-ajouter:hover {
-    background-color: #2980b9;
+.mic-button.recording {
+    background-color: #e74c3c;
+    border-color: #c0392b;
+    animation: pulse 1.5s infinite;
+}
+
+.mic-icon {
+    font-size: 3rem;
+}
+
+#mic-status {
+    font-size: 0.9rem;
+    margin-top: 5px;
+    text-align: center;
+    font-weight: bold;
+}
+
+.feedback-box {
+    margin-top: 20px;
+    padding: 15px;
+    background: #eaf2f8;
+    border-radius: 8px;
+    text-align: center;
+    width: 100%;
+    max-width: 500px;
+    border: 1px solid #d4e6f1;
+}
+
+.ai-status {
+    font-weight: bold;
+    color: #1f8f55;
+    margin-top: 10px;
+    font-size: 1.1rem;
+}
+
+.ai-error {
+    color: #c0392b;
+}
+
+@keyframes pulse {
+    0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(231, 76, 60, 0.7); }
+    70% { transform: scale(1.05); box-shadow: 0 0 0 15px rgba(231, 76, 60, 0); }
+    100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(231, 76, 60, 0); }
 }
 
 /* --- ZONE AUDIO GLOBALE --- */
@@ -224,11 +226,9 @@ hr {
     #resume {
         grid-template-columns: repeat(3, 1fr);
     }
-
     #listes-container {
         flex-direction: row;
     }
-
     .colonne {
         flex: 1;
     }
@@ -242,9 +242,7 @@ hr {
 }
 
 /* --- DESIGN DES LIGNES (li) --- */
-ul {
-    list-style: none;
-}
+ul { list-style: none; }
 
 ul li {
     background: #f8fafc;
@@ -260,19 +258,11 @@ ul li {
     word-break: break-word;
 }
 
-#affichage-monnaies li {
-    border-left-color: #e67e22;
-}
+#affichage-monnaies li { border-left-color: #e67e22; }
 
-/* Textes barrés quand c'est validé */
-del {
-    color: #95a5a6;
-    text-decoration: line-through;
-}
+del { color: #95a5a6; text-decoration: line-through; }
 
-.operation.reglee {
-    opacity: 0.78;
-}
+.operation.reglee { opacity: 0.78; }
 
 .operation.reglee .operation-client,
 .operation.reglee strong {
@@ -286,15 +276,8 @@ del {
     min-width: 0;
 }
 
-.operation-client {
-    font-weight: 700;
-    color: #2c3e50;
-}
-
-.operation-statut {
-    color: #64748b;
-    font-size: 12px;
-}
+.operation-client { font-weight: 700; color: #2c3e50; }
+.operation-statut { color: #64748b; font-size: 12px; }
 
 .operation-actions {
     display: flex;
@@ -304,116 +287,39 @@ del {
     flex: 0 0 auto;
 }
 
-.etat-vide {
-    color: #64748b;
-    font-style: italic;
-    border-left-color: #cbd5e1;
-}
+.etat-vide { color: #64748b; font-style: italic; border-left-color: #cbd5e1; }
 
 ul li button {
-    color: white;
-    border: none;
-    padding: 6px 12px;
-    font-size: 13px;
-    font-weight: bold;
-    border-radius: 5px;
-    cursor: pointer;
+    color: white; border: none; padding: 6px 12px;
+    font-size: 13px; font-weight: bold; border-radius: 5px; cursor: pointer;
 }
 
-.btn-regler {
-    background-color: #1f8f55;
-}
+.btn-regler { background-color: #1f8f55; }
+.btn-secondaire { background-color: #5d6d7e; }
+.btn-supprimer { background-color: #c0392b; }
 
-.btn-secondaire {
-    background-color: #5d6d7e;
-}
-
-.btn-supprimer {
-    background-color: #c0392b;
-}
-
-/* --- INTERFACE DE CONNEXION / INSCRIPTION --- */
+/* --- INTERFACE DE CONNEXION --- */
 .auth-card {
-    background: white;
-    max-width: 420px;
-    margin: 0 auto 20px;
-    padding: 24px;
-    border-radius: 16px;
-    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
+    background: white; max-width: 420px; margin: 0 auto 20px;
+    padding: 24px; border-radius: 16px; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+    display: flex; flex-direction: column; gap: 14px;
 }
-
-.auth-card label {
-    color: #4b5563;
-    font-size: 14px;
+.auth-card label { color: #4b5563; font-size: 14px; }
+.auth-card input { width: 100%; padding: 12px; border-radius: 10px; border: 1px solid #d1d5db; }
+.auth-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.auth-actions button, #btn-reset {
+    flex: 1; padding: 12px 14px; border: none; border-radius: 10px;
+    color: white; font-size: 15px; cursor: pointer; background: #3498db;
 }
-
-.auth-card input {
-    width: 100%;
-    padding: 12px;
-    border-radius: 10px;
-    border: 1px solid #d1d5db;
-}
-
-.auth-actions {
-    display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
-}
-
-.auth-actions button,
-#btn-reset {
-    flex: 1;
-    padding: 12px 14px;
-    border: none;
-    border-radius: 10px;
-    color: white;
-    font-size: 15px;
-    cursor: pointer;
-    background: #3498db;
-}
-
-.auth-actions button:hover,
-#btn-reset:hover {
-    background: #2d6fb7;
-}
-
-.auth-description {
-    color: #475569;
-    font-size: 15px;
-    line-height: 1.5;
-}
-
-.auth-message {
-    min-height: 25px;
-    font-size: 14px;
-    color: #1f8f55;
-}
+.auth-actions button:hover, #btn-reset:hover { background: #2d6fb7; }
+.auth-description { color: #475569; font-size: 15px; line-height: 1.5; }
+.auth-message { min-height: 25px; font-size: 14px; color: #1f8f55; }
 
 /* --- RESPONSIVE MOBILE --- */
 @media (max-width: 420px) {
-    body {
-        padding: 10px;
-        overflow-x: hidden;
-    }
-
-    #btn-lire-tout,
-    #btn-effacer-regles {
-        width: 100%;
-    }
-
-    ul li {
-        flex-direction: column;
-    }
-
-    .operation-actions {
-        width: 100%;
-        justify-content: stretch;
-    }
-
-    .operation-actions button {
-        flex: 1;
-    }
+    body { padding: 10px; overflow-x: hidden; }
+    #btn-lire-tout, #btn-effacer-regles { width: 100%; }
+    ul li { flex-direction: column; }
+    .operation-actions { width: 100%; justify-content: stretch; }
+    .operation-actions button { flex: 1; }
 }
