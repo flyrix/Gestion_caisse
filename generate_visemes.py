@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Script pour générer 8 images-test simples (visèmes) pour tester le lip-sync.
-Les images affichent des formes de bouche basiques.
+Script pour générer 8 images-test (visèmes) avec un emoji unique.
+Les images affichent le même emoji avec différentes formes de bouche.
 """
 
 import os
@@ -16,26 +16,23 @@ WIDTH, HEIGHT = 300, 300
 BG_COLOR = (240, 240, 240)  # Gris clair
 FACE_COLOR = (255, 200, 150)  # Beige peau
 MOUTH_COLOR = (180, 80, 80)  # Rouge bouche
-TEXT_COLOR = (100, 100, 100)
+EYE_COLOR = (50, 50, 50)
+OUTLINE_COLOR = (200, 160, 120)
 
 def create_viseme(filename, mouth_shape_fn):
-    """Crée une image avec une forme de bouche."""
+    """Crée une image avec un emoji + une forme de bouche."""
     img = Image.new('RGB', (WIDTH, HEIGHT), BG_COLOR)
     draw = ImageDraw.Draw(img)
     
-    # Cercle visage (simple)
-    draw.ellipse([(40, 40), (260, 260)], fill=FACE_COLOR, outline=(200, 160, 120), width=3)
+    # Cercle visage (base emoji style)
+    draw.ellipse([(50, 50), (250, 250)], fill=FACE_COLOR, outline=OUTLINE_COLOR, width=3)
     
     # Yeux (simples)
-    draw.ellipse([(90, 100), (120, 130)], fill=(50, 50, 50))
-    draw.ellipse([(180, 100), (210, 130)], fill=(50, 50, 50))
+    draw.ellipse([(85, 100), (115, 130)], fill=EYE_COLOR)
+    draw.ellipse([(185, 100), (215, 130)], fill=EYE_COLOR)
     
     # Bouche : appelr la fonction précise
     mouth_shape_fn(draw)
-    
-    # Texte (label)
-    label = filename.replace('.png', '').replace('_', ' ').upper()
-    draw.text((150, 270), label, fill=TEXT_COLOR, anchor='mm', font=None)
     
     img.save(os.path.join(VISEME_DIR, filename))
     print(f"✓ Created {filename}")
@@ -86,9 +83,10 @@ visemes = [
     ('teeth-smile.png', mouth_teeth_smile),
 ]
 
-print(f"Generating {len(visemes)} test visemes...")
+print(f"Generating {len(visemes)} visemes with single emoji style...")
 for filename, draw_fn in visemes:
     create_viseme(filename, draw_fn)
 
 print(f"\n✅ All visemes created in {VISEME_DIR}/")
 print("Test them at page.html — click to authorize audio, then press the mic button.")
+

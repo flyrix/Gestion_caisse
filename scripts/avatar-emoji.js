@@ -19,36 +19,14 @@
     container.innerHTML = '<div class="avatar-emoji">👩‍💼</div>';
   }
 
-  function showMouthAnimation(){
-    const container = document.getElementById(containerId);
-    if(!container) return;
-
-    const mouths = ['😐', '😊', '😮', '😊', '😐'];
-    mouthState = (mouthState + 1) % mouths.length;
-    
-    // Garder l'emoji principal + ajouter une bouche animée en overlay
-    const currentMouth = mouths[mouthState];
-    container.innerHTML = `<div class="avatar-emoji-speaking">${currentMouth}</div>`;
-  }
-
   function startSpeaking(){
     if(isSpeaking) return;
     isSpeaking = true;
-    mouthState = 0;
-
-    const animateLoop = () => {
-      if(!isSpeaking) return;
-      showMouthAnimation();
-      mouthTimer = setTimeout(animateLoop, 200); // Tous les 200ms
-    };
-
-    animateLoop();
   }
 
   function stopSpeaking(){
     isSpeaking = false;
     if(mouthTimer) clearTimeout(mouthTimer);
-    renderAvatar(); // Retour à neutre
   }
 
   function speak(text){
