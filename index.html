@@ -3,8 +3,9 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="stylesheet" href="styles/style.css" />
+    <link rel="stylesheet" href="styles/style.css?v=1.0.4" />
     <link rel="icon" href="icons/icon-192.png" />
+    <link rel="manifest" href="manifest.json" />
     <meta name="theme-color" content="#3498db" />
     <title>Connexion - Gestion de Caisse</title>
 </head>
@@ -41,7 +42,10 @@
         <div id="auth-message" class="auth-message" style="margin-top: 10px; font-weight: bold;"></div>
     </div>
 
-    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <!-- SDK Supabase avec defer pour ne pas bloquer si hors-ligne -->
+    <script src="https://unpkg.com/@supabase/supabase-js@2" defer></script>
+    
+    <!-- Scripts de configuration et d'authentification -->
     <script src="scripts/supabase-config.js"></script>
     <script src="scripts/supabase.js"></script>
     <script src="scripts/auth.js"></script>
