@@ -1,8 +1,9 @@
-// 1. Initialisation des listes (Tableaux d'objets)
+// 1. Initialisation des listes & filtres
 let credits = [];
 let monnaies = [];
 let currentUser = null;
 let realtimeChannel = null;
+let filtreActif = 'tous'; // 'tous', 'encours', 'soldes'
 
 // 2. Sélection des éléments du DOM
 const btnVocal = document.querySelector('#btn-vocal-main');
@@ -24,7 +25,20 @@ const authBar = document.querySelector('#auth-bar');
 
 const formatMontant = (montant) => `${Number(montant).toLocaleString('fr-FR')} FCFA`;
 
-// Initialisation DB et chargement des opérations persistées
+// Synthèse vocale reliée au Robot
+const parler = (texte) => {
+    if (window.RobotAvatar) {
+        RobotAvatar.parler(texte);
+    } else if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel(); 
+        const message = new SpeechSynthesisUtterance(texte);
+        message.lang = "fr-FR";
+        message.rate = 0.90;
+        window.speechSynthesis.speak(message);
+    }
+};
+
+// Initialisation DB et chargement des données
 window.addEventListener('load', async () => {
     try {
         await SupabaseDB.init();
@@ -71,9 +85,9 @@ window.addEventListener('load', async () => {
 
         trierOperations();
         
-        // Flux Temps Réel (Websocket)
+        // Temps réel Supabase
         try {
-            realtimeChannel = await SupabaseDB.subscribeToOperations(currentUser.id, async (payload) => {
+            realtimeChannel = await SupabaseDB.subscribeToOperations(currentUser.id, async () => {
                 try {
                     const fresh = await SupabaseDB.fetchOperations(currentUser.id);
                     credits = [];
@@ -85,14 +99,14 @@ window.addEventListener('load', async () => {
                     trierOperations();
                     afficherListes();
                 } catch (e) {
-                    console.warn('Realtime handler error', e);
+                    console.warn('Erreur Realtime', e);
                 }
             });
         } catch (e) {
-            console.warn('Could not subscribe realtime', e);
+            console.warn('Abonnement Realtime impossible', e);
         }
     } catch (err) {
-        console.warn('Init error', err);
+        console.warn('Erreur Init', err);
         if (!currentUser) {
             window.location.href = './index.html';
             return;
@@ -103,50 +117,37 @@ window.addEventListener('load', async () => {
 });
 
 // ==========================================
-// FONCTION VOCALE : FAIRE PARLER L'APPLICATION
-// ==========================================
-const parler = (texte) => {
-    if (!('speechSynthesis' in window)) return;
-    window.speechSynthesis.cancel(); 
-    const message = new SpeechSynthesisUtterance(texte);
-    message.lang = "fr-FR";
-    message.rate = 0.90; // Un peu plus lent pour la clarté
-    window.speechSynthesis.speak(message);
-};
-
-// ==========================================
-// ANALYSEUR LOCAL (IA Basique - NLU)
+// ANALYSEUR VOCAL NLU (AVEC DÉTECTION DU RÈGLEMENT)
 // ==========================================
 function analyserPhrase(phrase) {
     const p = phrase.toLowerCase();
     
-    // 1. Chercher un montant (chiffres avec ou sans espaces)
+    // 1. Recherche du montant
     const matchMontant = p.match(/(\d+[\d\s]*)/);
     if (!matchMontant) {
         return { erreur: "Je n'ai pas compris le montant." };
     }
     const montant = parseInt(matchMontant[0].replace(/\s/g, ''), 10);
 
-    // 2. Déterminer le type (Crédit vs Monnaie)
+    // 2. Détection d'une action de RÈGLEMENT / REMBOURSEMENT
+    const estUnReglement = p.includes('réglé') || p.includes('regle') || p.includes('payé') || p.includes('paye') || p.includes('remboursé');
+
+    // 3. Détermination du type (Crédit vs Monnaie)
     let type = 'credit'; 
     if (p.includes('monnaie') || p.includes('je dois') || p.includes('rendre') || p.includes('rendu')) {
         type = 'monnaie';
-    } else if (p.includes('doit') || p.includes('crédit') || p.includes('pris')) {
-        type = 'credit';
     }
 
-    // 3. Trouver le nom (On supprime les mots de liaison)
-    const motsExclus = ['me', 'doit', 'je', 'lui', 'dois', 'donné', 'rendre', 'monnaie', 'francs', 'franc', 'fcfa', 'de', 'à', 'pour', 'crédit', 'le', 'la', 'les'];
+    // 4. Extraction du nom
+    const motsExclus = ['me', 'doit', 'je', 'lui', 'dois', 'donné', 'donne', 'rendre', 'monnaie', 'francs', 'franc', 'fcfa', 'de', 'à', 'pour', 'crédit', 'le', 'la', 'les', 'a', 'réglé', 'regle', 'payé', 'remboursé'];
     const mots = p.replace(/[0-9]/g, '').split(/\s+/).filter(m => m.length > 2 && !motsExclus.includes(m));
-    
-    // Le premier mot restant pertinent est considéré comme le nom
     let client = mots.length > 0 ? mots[0].charAt(0).toUpperCase() + mots[0].slice(1) : "Inconnu";
 
-    return { client, montant, type };
+    return { client, montant, type, estUnReglement };
 }
 
 // ==========================================
-// CONFIGURATION DU MICRO (RECONNAISSANCE GLOBALE)
+// RECONNAISSANCE VOCALE
 // ==========================================
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
@@ -156,11 +157,7 @@ if (SpeechRecognition && btnVocal) {
     reconnaissance.interimResults = false;
 
     btnVocal.addEventListener('click', () => {
-        try {
-            reconnaissance.start();
-        } catch(e) {
-            reconnaissance.stop();
-        }
+        try { reconnaissance.start(); } catch(e) { reconnaissance.stop(); }
     });
 
     reconnaissance.onstart = () => {
@@ -175,16 +172,16 @@ if (SpeechRecognition && btnVocal) {
         const phrase = event.results[0][0].transcript;
         transcriptText.innerHTML = `<strong>Compris :</strong> "${phrase}"`;
         
-        // Analyse de la phrase
-        const resultat = analyserPhrase(phrase);
+        const res = analyserPhrase(phrase);
 
-        if (resultat.erreur) {
-            aiResponse.textContent = `⚠️ ${resultat.erreur}`;
+        if (res.erreur) {
+            aiResponse.textContent = `⚠️ ${res.erreur}`;
             aiResponse.classList.add('ai-error');
-            parler(resultat.erreur);
+            parler(res.erreur);
+        } else if (res.estUnReglement) {
+            await automatiserReglementVocal(res.client, res.montant, res.type);
         } else {
-            // Si l'analyse est bonne, on enregistre
-            await enregistrerOperationVocal(resultat.client, resultat.montant, resultat.type);
+            await enregistrerOperationVocal(res.client, res.montant, res.type);
         }
     };
 
@@ -197,59 +194,89 @@ if (SpeechRecognition && btnVocal) {
     
     reconnaissance.onend = () => {
         btnVocal.classList.remove('recording');
-        statusText.textContent = "Appuyez et parlez";
+        statusText.textContent = "Appuyez pour répondre";
     };
 } else if (btnVocal) {
     btnVocal.style.display = "none";
-    alert("Votre navigateur ne supporte pas la reconnaissance vocale.");
 }
 
 // ==========================================
-// ENREGISTREMENT EN BASE (Remplaçant l'ancien btn-ajouter)
+// AUTOMATISATION DES RÈGLEMENTS
 // ==========================================
-async function enregistrerOperationVocal(nom, somme, type) {
+async function automatiserReglementVocal(nom, somme, type) {
+    const liste = type === 'credit' ? credits : monnaies;
+    const opExistante = liste.find(o => o.client.toLowerCase() === nom.toLowerCase() && !o.paye);
+
+    if (opExistante) {
+        opExistante.paye = true;
+        if (window.DB) DB.update(opExistante).catch(e => console.warn(e));
+        if (currentUser) SupabaseDB.updateOperation(opExistante, currentUser.id).catch(e => console.warn(e));
+
+        const msg = `Parfait ! Le règlement de ${nom} a été pris en compte. L'opération est marquée comme SOLDE.`;
+        aiResponse.textContent = `✅ ${msg}`;
+        parler(msg);
+        afficherListes();
+    } else {
+        // Enregistre directement comme réglé si l'opération n'existait pas
+        await enregistrerOperationVocal(nom, somme, type, true);
+    }
+}
+
+// ==========================================
+// ENREGISTREMENT EN BASE
+// ==========================================
+async function enregistrerOperationVocal(nom, somme, type, estPaye = false) {
     const maintenant = new Date().toISOString();
     const nouvelleOperation = {
         id: Date.now(), 
         client: nom, 
         montant: somme,
-        paye: false,
+        paye: estPaye,
         type: type,
         createdat: maintenant,
         createdAt: maintenant 
     };
 
     try {
-        if (window.DB) {
-            await DB.addOperation(nouvelleOperation);
-        }
-        if (currentUser) {
-            SupabaseDB.saveOperation(nouvelleOperation, currentUser.id).catch(err => console.warn('Supabase save error', err));
-        }
+        if (window.DB) await DB.addOperation(nouvelleOperation);
+        if (currentUser) SupabaseDB.saveOperation(nouvelleOperation, currentUser.id).catch(err => console.warn(err));
 
-        let messageConfirmation = "";
-        if (type === 'credit') { 
-            credits.push(nouvelleOperation);
-            messageConfirmation = `C'est noté. ${nom} vous doit ${somme} francs.`;
+        let msg = "";
+        if (estPaye) {
+            msg = `Règlement de ${somme} francs pour ${nom} enregistré et soldé.`;
+        } else if (type === 'credit') { 
+            msg = `C'est noté. ${nom} vous doit ${somme} francs.`;
         } else {
-            monnaies.push(nouvelleOperation);
-            messageConfirmation = `C'est noté. Vous devez rendre ${somme} francs à ${nom}.`;
+            msg = `C'est noté. Vous devez rendre ${somme} francs à ${nom}.`;
         }
 
-        aiResponse.textContent = `✅ ${messageConfirmation}`;
-        parler(messageConfirmation);
-        
+        if (type === 'credit') credits.push(nouvelleOperation);
+        else monnaies.push(nouvelleOperation);
+
+        aiResponse.textContent = `✅ ${msg}`;
+        parler(msg);
         afficherListes();
     } catch (err) {
-        console.warn('Erreur ajout operation', err);
+        console.warn('Erreur ajout', err);
         aiResponse.textContent = "⚠️ Erreur lors de l'enregistrement";
-        parler("Erreur lors de l'enregistrement de l'opération.");
+        parler("Erreur lors de l'enregistrement.");
     }
 }
 
 // ==========================================
-// FONCTIONS DE MISE À JOUR ET SUPPRESSION
+// GESTION DU FILTRAGE & AFFICHAGE
 // ==========================================
+window.filtrerComptes = function(filtre) {
+    filtreActif = filtre;
+    document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
+    
+    if (filtre === 'tous') document.getElementById('filter-all').classList.add('active');
+    if (filtre === 'encours') document.getElementById('filter-pending').classList.add('active');
+    if (filtre === 'soldes') document.getElementById('filter-settled').classList.add('active');
+
+    afficherListes();
+};
+
 function trouverOperation(id, type) {
     const liste = type === 'credit' ? credits : monnaies;
     return liste.find(element => element.id === id);
@@ -260,17 +287,11 @@ async function reglerOperation(id, type) {
     if (!operation) return;
 
     operation.paye = !operation.paye;
-    if (window.DB) {
-        DB.update(operation).catch(e => console.warn(e));
-    }
-    if (currentUser) {
-        SupabaseDB.updateOperation(operation, currentUser.id).catch(e => console.warn(e));
-    }
+    if (window.DB) DB.update(operation).catch(e => console.warn(e));
+    if (currentUser) SupabaseDB.updateOperation(operation, currentUser.id).catch(e => console.warn(e));
 
     if (operation.paye) {
-        parler(type === 'credit'
-            ? `Le crédit de ${operation.client} est réglé.`
-            : `La monnaie de ${operation.client} est rendue.`);
+        parler(`Le compte de ${operation.client} est maintenant soldé.`);
     } else {
         parler(`L'opération de ${operation.client} est remise en attente.`);
     }
@@ -282,31 +303,20 @@ async function supprimerOperation(id, type) {
     const operation = trouverOperation(id, type);
     if (!operation) return;
 
-    const ok = confirm(`Supprimer l'opération de ${operation.client} ?`);
-    if (!ok) return;
+    if (!confirm(`Supprimer l'opération de ${operation.client} ?`)) return;
 
-    if (type === 'credit') {
-        credits = credits.filter(element => element.id !== id);
-    } else {
-        monnaies = monnaies.filter(element => element.id !== id);
-    }
+    if (type === 'credit') credits = credits.filter(e => e.id !== id);
+    else monnaies = monnaies.filter(e => e.id !== id);
 
-    if (window.DB) {
-        DB.remove(id).catch(e => console.warn(e));
-    }
-    if (currentUser) {
-        SupabaseDB.deleteOperation(id, currentUser.id).catch(e => console.warn(e));
-    }
+    if (window.DB) DB.remove(id).catch(e => console.warn(e));
+    if (currentUser) SupabaseDB.deleteOperation(id, currentUser.id).catch(e => console.warn(e));
 
     parler(`Opération de ${operation.client} supprimée.`);
     afficherListes();
 }
 
 function trierOperations() {
-    const tri = (a, b) => {
-        if (a.paye !== b.paye) return a.paye ? 1 : -1;
-        return (b.id || 0) - (a.id || 0);
-    };
+    const tri = (a, b) => (b.id || 0) - (a.id || 0);
     credits.sort(tri);
     monnaies.sort(tri);
 }
@@ -336,15 +346,12 @@ function creerLigneOperation(element, type) {
     let texteDate = "";
     if (dateSource) {
         const d = new Date(dateSource);
-        texteDate = " | Le " + d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' }) + 
-                    " à " + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+        texteDate = " | Le " + d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
     }
 
     const statut = document.createElement('span');
     statut.className = 'operation-statut';
-    
-    const etatActuel = element.paye ? (type === 'credit' ? 'Réglé' : 'Rendu') : 'En attente';
-    statut.textContent = `${etatActuel}${texteDate}`;
+    statut.textContent = `${element.paye ? '✅ Soldé' : '⏳ En attente'}${texteDate}`;
 
     details.append(titre, montant, statut);
 
@@ -354,7 +361,7 @@ function creerLigneOperation(element, type) {
     const boutonRegler = document.createElement('button');
     boutonRegler.type = 'button';
     boutonRegler.className = element.paye ? 'btn-secondaire' : 'btn-regler';
-    boutonRegler.textContent = element.paye ? 'Annuler' : 'Régler';
+    boutonRegler.textContent = element.paye ? 'Réouvrir' : 'Régler';
     boutonRegler.addEventListener('click', () => reglerOperation(element.id, type));
 
     const boutonSupprimer = document.createElement('button');
@@ -369,8 +376,8 @@ function creerLigneOperation(element, type) {
 }
 
 function mettreAJourResume() {
-    const resteCredits = credits.filter(c => !c.paye).reduce((total, c) => total + Number(c.montant), 0);
-    const resteMonnaies = monnaies.filter(m => !m.paye).reduce((total, m) => total + Number(m.montant), 0);
+    const resteCredits = credits.filter(c => !c.paye).reduce((t, c) => t + Number(c.montant), 0);
+    const resteMonnaies = monnaies.filter(m => !m.paye).reduce((t, m) => t + Number(m.montant), 0);
     const solde = resteCredits - resteMonnaies;
 
     totalCredits.textContent = formatMontant(resteCredits);
@@ -384,23 +391,32 @@ const afficherListes = () => {
     affichageCredit.innerHTML = "";
     affichageMonnaie.innerHTML = "";
 
-    if (credits.length === 0) {
-        affichageCredit.append(creerMessageVide("Aucun crédit enregistré."));
+    const filtrer = (liste) => {
+        if (filtreActif === 'encours') return liste.filter(o => !o.paye);
+        if (filtreActif === 'soldes') return liste.filter(o => o.paye);
+        return liste;
+    };
+
+    const creditsAffiches = filtrer(credits);
+    const monnaiesAffichees = filtrer(monnaies);
+
+    if (creditsAffiches.length === 0) {
+        affichageCredit.append(creerMessageVide("Aucun crédit à afficher."));
     } else {
-        credits.forEach(element => affichageCredit.append(creerLigneOperation(element, 'credit')));
+        creditsAffiches.forEach(el => affichageCredit.append(creerLigneOperation(el, 'credit')));
     }
 
-    if (monnaies.length === 0) {
-        affichageMonnaie.append(creerMessageVide("Aucune monnaie enregistrée."));
+    if (monnaiesAffichees.length === 0) {
+        affichageMonnaie.append(creerMessageVide("Aucune monnaie à afficher."));
     } else {
-        monnaies.forEach(element => affichageMonnaie.append(creerLigneOperation(element, 'monnaie')));
+        monnaiesAffichees.forEach(el => affichageMonnaie.append(creerLigneOperation(el, 'monnaie')));
     }
 
     mettreAJourResume();
 };
 
 // ==========================================
-// LECTURE AUDIO COMPLÈTE DU CARNET
+// ACTIONS GLOBALES
 // ==========================================
 btnLireTout.addEventListener('click', () => {
     let lecture = "";
@@ -408,48 +424,38 @@ btnLireTout.addEventListener('click', () => {
     const restantsMonnaies = monnaies.filter(m => !m.paye);
 
     if (restantsCredits.length > 0) {
-        lecture += "Voici les personnes qui vous doivent de l'argent. ";
-        restantsCredits.forEach(c => {
-            lecture += `${c.client} vous doit ${c.montant} Francs. `;
-        });
+        lecture += "Voici les crédits en attente. ";
+        restantsCredits.forEach(c => lecture += `${c.client} vous doit ${c.montant} Francs. `);
     } else {
-        lecture += "Personne ne vous doit d'argent. ";
+        lecture += "Aucun crédit en attente. ";
     }
 
     if (restantsMonnaies.length > 0) {
-        lecture += "Voici la monnaie que vous devez rendre. ";
-        restantsMonnaies.forEach(m => {
-            lecture += `Vous devez rendre ${m.montant} Francs à ${m.client}. `;
-        });
+        lecture += "Et la monnaie à rendre. ";
+        restantsMonnaies.forEach(m => lecture += `Vous devez rendre ${m.montant} Francs à ${m.client}. `);
     } else {
-        lecture += "Vous ne devez de monnaie à personne.";
+        lecture += "Aucune monnaie à rendre.";
     }
 
     parler(lecture);
 });
 
-// Nettoyage en lot
 btnEffacerRegles.addEventListener('click', async () => {
-    const operationsReglees = [...credits, ...monnaies].filter(operation => operation.paye);
+    const operationsReglees = [...credits, ...monnaies].filter(o => o.paye);
     if (operationsReglees.length === 0) {
         parler("Aucune opération réglée à effacer.");
         return;
     }
 
-    const ok = confirm(`Effacer ${operationsReglees.length} opération(s) réglée(s) ?`);
-    if (!ok) return;
+    if (!confirm(`Effacer définitivement ${operationsReglees.length} opération(s) soldée(s) ?`)) return;
 
-    const ids = operationsReglees.map(operation => operation.id);
-    credits = credits.filter(operation => !operation.paye);
-    monnaies = monnaies.filter(operation => !operation.paye);
+    const ids = operationsReglees.map(o => o.id);
+    credits = credits.filter(o => !o.paye);
+    monnaies = monnaies.filter(o => !o.paye);
 
-    if (window.DB) {
-        DB.removeMany(ids).catch(e => console.warn(e));
-    }
-    if (currentUser) {
-        SupabaseDB.deleteOperations(ids, currentUser.id).catch(e => console.warn(e));
-    }
+    if (window.DB) DB.removeMany(ids).catch(e => console.warn(e));
+    if (currentUser) SupabaseDB.deleteOperations(ids, currentUser.id).catch(e => console.warn(e));
 
-    parler("Les opérations réglées ont été effacées.");
+    parler("Les opérations réglées ont été supprimées.");
     afficherListes();
 });

@@ -3,47 +3,70 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="stylesheet" href="styles/style.css?v=1.0.2" />
+    <link rel="stylesheet" href="styles/style.css?v=1.0.3" />
     <link rel="icon" href="icons/icon-192.png" />
     <link rel="manifest" href="manifest.json" />
     <meta name="theme-color" content="#3498db" />
-    <title>Caisse Vocale Intelligente</title>
+    <title>Caisse Vocale Intelligente avec Avatar Robot</title>
+
+    <!-- Bibliothèque Lottie pour l'animation Web GL / JSON de l'avatar -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bodymovin/5.12.2/lottie.min.js"></script>
 </head>
 <body>
-    <h1>Caisse Vocale 🎙️</h1>
+    <header>
+        <h1>Caisse Vocale 🎙️</h1>
 
-    <div id="auth-bar" class="auth-bar" hidden>
-        <span>Connecté(e) : <strong id="user-email"></strong></span>
-        <button id="btn-deconnexion" type="button">Déconnexion</button>
-    </div>
+        <div id="auth-bar" class="auth-bar" hidden>
+            <span>Connecté(e) : <strong id="user-email"></strong></span>
+            <button id="btn-deconnexion" type="button">Déconnexion</button>
+        </div>
+    </header>
 
-    <!-- Interface Vocale Principale -->
+    <!-- Interface Vocale Principale avec Avatar Robot Animé -->
     <main class="vocal-container">
-        <button id="btn-vocal-main" class="mic-button">
+        <!-- Bulle de dialogue parlante de l'Avatar -->
+        <div id="robot-speech-bubble" class="speech-bubble" aria-live="polite">
+            <p id="robot-message">Bonjour ! Que souhaitez-vous enregistrer aujourd'hui ?</p>
+        </div>
+
+        <!-- Conteneur de l'animation Lottie du Robot -->
+        <div id="avatar-container" class="avatar-animation" title="Votre assistant virtuel"></div>
+
+        <!-- Bouton Micro principal synchronisé avec le Robot -->
+        <button id="btn-vocal-main" class="mic-button" aria-label="Activer le microphone">
             <span class="mic-icon">🎙️</span>
-            <span id="mic-status">Appuyez et parlez</span>
+            <span id="mic-status">Appuyez pour répondre</span>
         </button>
 
         <div id="live-feedback" class="feedback-box">
-            <p id="transcript-text">Exemple : <em>"Moussa me doit 2000 francs"</em> ou <em>"J'ai rendu 500 francs à Awa"</em></p>
+            <p id="transcript-text">Exemple : <em>"Moussa a réglé 2000 francs"</em> ou <em>"J'ai rendu 500 francs à Awa"</em></p>
             <p id="ai-response" class="ai-status"></p>
         </div>
     </main>
 
     <hr />
 
+    <!-- Actions globales & Automatisation -->
     <div class="zone-audio-globale">
         <button id="btn-lire-tout">🔊 Résumé vocal des comptes</button>
-        <button id="btn-effacer-regles">Effacer les réglés</button>
+        <button id="btn-effacer-regles" class="btn-secondary">Nettoyer l'historique des réglés</button>
     </div>
 
+    <!-- Filtres d'affichage pour la gestion automatique des règlements -->
+    <div class="filter-bar">
+        <button id="filter-all" class="filter-btn active" onclick="filtrerComptes('tous')">Tous</button>
+        <button id="filter-pending" class="filter-btn" onclick="filtrerComptes('encours')">En cours</button>
+        <button id="filter-settled" class="filter-btn" onclick="filtrerComptes('soldes')">✅ Soldés / Réglés</button>
+    </div>
+
+    <!-- Résumé financier -->
     <section id="resume" aria-label="Résumé du carnet">
         <div>
-            <span>Total crédits</span>
+            <span>Total crédits en cours</span>
             <strong id="total-credits">0 FCFA</strong>
         </div>
         <div>
-            <span>Total monnaies</span>
+            <span>Total monnaies à rendre</span>
             <strong id="total-monnaies">0 FCFA</strong>
         </div>
         <div>
@@ -52,6 +75,7 @@
         </div>
     </section>
 
+    <!-- Affichage des listes de crédits et monnaies -->
     <div id="listes-container">
         <section class="colonne">
             <h2>Ils me doivent (Crédits)</h2>
@@ -64,13 +88,16 @@
         </section>
     </div>
 
+    <!-- SDK Supabase & Logiciels applicatifs -->
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
     <script src="scripts/supabase-config.js"></script>
     <script src="scripts/supabase.js"></script>
     <script src="scripts/db.js"></script>
     <script src="scripts/auth.js"></script>
     
-    <script src="scripts/ai-vocal.js?v=1.0.0"></script>
-    <script src="scripts/script.js?v=1.0.2"></script>
+    <!-- Script de l'Avatar Robot (Animation Lottie, Text-To-Speech & Accueil automatique) -->
+    <script src="scripts/avatar-robot.js?v=1.0.0"></script>
+    <script src="scripts/ai-vocal.js?v=1.0.1"></script>
+    <script src="scripts/script.js?v=1.0.3"></script>
 </body>
 </html>
