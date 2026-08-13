@@ -148,6 +148,15 @@ hr {
 }
 
 .avatar-fallback.humanoid { font-size: 3.2rem; }
+.avatar-fallback.viseme { font-size: 3.2rem; }
+
+/* Images de visèmes (lip-sync) */
+.avatar-animation img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    border-radius: 8px;
+}
 
 .mic-button {
     width: 130px;
