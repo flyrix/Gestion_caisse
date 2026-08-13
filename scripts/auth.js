@@ -242,6 +242,14 @@ if (document.body.contains(document.querySelector('#btn-principal'))) {
             return;
           }
           if (data && data.session) {
+            // ✅ Si l'utilisateur était en mode invité, synchroniser les données
+            if (localStorage.getItem('is_guest_mode') === 'true') {
+              console.log('🔄 Détection mode invité → sync vers Supabase...');
+              // Nettoyer les flags invité AVANT sync (pour éviter les conflits)
+              localStorage.removeItem('is_guest_mode');
+              localStorage.removeItem('guest_id');
+              sessionStorage.removeItem('guest_session');
+            }
             window.location.href = './page.html';
           } else {
             showMessage('Session introuvable. Vérifiez vos identifiants.', true);

@@ -4,6 +4,8 @@ let monnaies = [];
 let currentUser = null;
 let realtimeChannel = null;
 let filtreActif = 'tous'; // 'tous', 'encours', 'soldes'
+let isGuestMode = false; // ✅ Variable globale pour isGuest
+let guestId = null; // ✅ Garder l'ID guest pour sync
 
 // 2. Sélection des éléments du DOM
 const btnVocal = document.querySelector('#btn-vocal-main');
@@ -38,21 +40,134 @@ const parler = (texte) => {
     }
 };
 
+// ==========================================
+// 🎯 SYNCHRONISATION MODE INVITÉ → SUPABASE
+// ==========================================
+/**
+ * Migrer les données du Mode Invité vers un compte Supabase
+ * À appeler une fois que l'utilisateur se connecte après être en mode invité
+ */
+async function syncGuestDataToSupabase(supabaseUserId) {
+    if (!guestId || !isGuestMode) return;
+    
+    try {
+        console.log(`🔄 Sync: Transfert des données invité vers Supabase (user: ${supabaseUserId})`);
+        
+        if (!window.DB) return;
+        
+        // Charger toutes les opérations du guest depuis IndexedDB
+        const guestOps = await DB.getAll();
+        
+        if (guestOps.length === 0) {
+            console.log('✅ Aucune données invité à synchroniser');
+            return;
+        }
+        
+        // Transfert vers Supabase avec nouvel user_id
+        for (const op of guestOps) {
+            const transferOp = {
+                ...op,
+                user_id: supabaseUserId,
+                synced: true,
+                syncedAt: new Date().toISOString()
+            };
+            
+            try {
+                await SupabaseDB.saveOperation(transferOp, supabaseUserId);
+                console.log(`✅ Op transférée: ${op.client} - ${op.montant} FCFA`);
+            } catch (e) {
+                console.warn(`⚠️ Erreur transfert op ${op.id}:`, e);
+            }
+        }
+        
+        console.log(`✅ Sync complètée: ${guestOps.length} opérations transférées`);
+        parler(`Bienvenue ! J'ai récupéré vos ${guestOps.length} opérations précédentes.`);
+        
+    } catch (e) {
+        console.error('❌ Erreur sync guest → Supabase:', e);
+    }
+}
+
+/**
+ * Vérifier la reconnexion & recharger les données si session expirée
+ */
+async function verifySessionAndReload() {
+    if (isGuestMode) return; // Pas de vérification pour guest
+    
+    try {
+        const session = await SupabaseDB.getSession();
+        if (!session) {
+            console.warn('⚠️ Session expirée, tentative de reload...');
+            // Données toujours en IndexedDB, rediriger vers login
+            window.location.href = './index.html';
+        }
+    } catch (e) {
+        console.warn('⚠️ Vérification session échouée:', e);
+    }
+}
+
+// Gestionnaire online/offline
+window.addEventListener('online', async () => {
+    console.log('✅ Connexion rétablie');
+    if (!isGuestMode) {
+        await verifySessionAndReload();
+    }
+});
+
+window.addEventListener('offline', () => {
+    console.log('⚠️ Connexion perdue - Mode offline activé');
+});
+
 // Initialisation DB et chargement des données
 window.addEventListener('load', async () => {
     try {
         // Vérifier si en mode guest/invité
-        const isGuest = Auth.isGuestMode && Auth.isGuestMode();
+        isGuestMode = Auth.isGuestMode && Auth.isGuestMode();
         
-        if (!isGuest) {
+        if (!isGuestMode) {
             // Mode normal : vérifier la session Supabase
             await SupabaseDB.init();
-            const session = await SupabaseDB.getSession();
-            if (!session) {
-                window.location.href = './index.html';
-                return;
+            try {
+                const session = await SupabaseDB.getSession();
+                if (!session) {
+                    // ✅ Essayer de récupérer depuis IndexedDB avant de rediriger
+                    if (window.DB) {
+                        const ops = await DB.getAll();
+                        if (ops.length > 0) {
+                            console.warn('Session Supabase expirée, redirection login...');
+                        }
+                    }
+                    window.location.href = './index.html';
+                    return;
+                }
+                currentUser = session.user;
+                
+                // ✅ SYNC MODE INVITÉ → SUPABASE (détecter si l'utilisateur vient de guest mode)
+                if (window.DB && currentUser.id) {
+                    const guestIdStored = localStorage.getItem('guest_id');
+                    if (guestIdStored) {
+                        // L'utilisateur avait des données invité, faire la sync
+                        console.log('🔄 Utilisateur précédemment en mode invité, sync...');
+                        await syncGuestDataToSupabase(currentUser.id);
+                        // Nettoyer les traces guest après sync
+                        localStorage.removeItem('is_guest_mode');
+                        localStorage.removeItem('guest_id');
+                        sessionStorage.removeItem('guest_session');
+                    }
+                }
+            } catch (e) {
+                console.warn('Erreur Supabase init:', e);
+                // Essayer IndexedDB comme fallback
+                if (window.DB) {
+                    const ops = await DB.getAll();
+                    if (ops.length === 0) {
+                        window.location.href = './index.html';
+                        return;
+                    }
+                }
+                // Sinon continuer en mode offline
+                currentUser = { id: 'offline_user', email: 'offline@local' };
             }
-            currentUser = session.user;
         } else {
             // Mode guest : utiliser la session stockée localement
             const guestSession = Auth.getGuestSession && Auth.getGuestSession();
@@ -61,6 +176,7 @@ window.addEventListener('load', async () => {
                 return;
             }
             currentUser = guestSession.user;
+            guestId = guestSession.user.id;
         }
 
         if (userEmailDisplay) {
@@ -74,13 +190,17 @@ window.addEventListener('load', async () => {
                     SupabaseDB.unsubscribeChannel(realtimeChannel);
                     realtimeChannel = null;
                 }
-                // Nettoyer le mode guest s'il y a
-                if (isGuest) {
+                // ✅ Nettoyer le mode guest s'il y a (utilise la variable globale)
+                if (isGuestMode) {
                     localStorage.removeItem('is_guest_mode');
                     localStorage.removeItem('guest_id');
                     sessionStorage.removeItem('guest_session');
                 } else {
-                    await Auth.signOut();
+                    try {
+                        await Auth.signOut();
+                    } catch (e) {
+                        console.warn('Erreur Auth.signOut():', e);
+                    }
                 }
                 window.location.href = './index.html';
             });
@@ -91,7 +211,7 @@ window.addEventListener('load', async () => {
         }
 
         // Charger les opérations (Supabase si online + connected, sinon IndexedDB)
-        if (!isGuest) {
+        if (!isGuestMode) {
             try {
                 const supaOps = await SupabaseDB.fetchOperations(currentUser.id);
                 if (Array.isArray(supaOps) && supaOps.length > 0) {
@@ -125,7 +245,7 @@ window.addEventListener('load', async () => {
         trierOperations();
         
         // Temps réel Supabase (si pas en mode guest)
-        if (!isGuest) {
+        if (!isGuestMode) {
             try {
                 realtimeChannel = await SupabaseDB.subscribeToOperations(currentUser.id, async () => {
                     try {
@@ -137,13 +257,14 @@ window.addEventListener('load', async () => {
                             else if (o.type === 'monnaie') monnaies.push(o);
                         });
                         trierOperations();
-                    afficherListes();
-                } catch (e) {
-                    console.warn('Erreur Realtime', e);
-                }
-            });
-        } catch (e) {
-            console.warn('Abonnement Realtime impossible', e);
+                        afficherListes();
+                    } catch (e) {
+                        console.warn('Erreur Realtime', e);
+                    }
+                });
+            } catch (e) {
+                console.warn('Abonnement Realtime impossible', e);
+            }
         }
     } catch (err) {
         console.warn('Erreur Init', err);

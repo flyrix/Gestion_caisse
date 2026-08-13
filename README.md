@@ -1,5 +1,18 @@
 # Gestion_caisse
 
+## 🚀 Mode Invité (Offline-First)
+
+**Nouveauté:** L'app fonctionne **100% offline** en Mode Invité, parfait pour les environnements sans connexion stable.
+
+- **Sans compte requis** ✅ Aucune inscription
+- **Données persistantes** ✅ Stockées localement en IndexedDB
+- **Voice offline** ✅ Micro + TTS fonctionnent offline
+- **Zero dependencies** ✅ Pas de Supabase requis
+
+👉 [**Consulter le guide Mode Invité**](GUEST_MODE_GUIDE.md) | [**Plan de test**](TEST_GUEST_MODE.md)
+
+---
+
 ## Authentification et base de données Supabase
 
 1. Créez un projet Supabase sur https://app.supabase.com
