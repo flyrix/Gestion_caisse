@@ -27,6 +27,23 @@
   let visemeIndex = 0;
 
   // ============================================
+  // MESSAGES VARIENT SELON L'HEURE
+  // ============================================
+  function getGreetingMessage(){
+    const hour = new Date().getHours();
+    
+    if(hour >= 5 && hour < 12){
+      return "Bonjour ! Que souhaitez-vous enregistrer aujourd'hui ?";
+    } else if(hour >= 12 && hour < 17){
+      return "Bon après-midi ! Quoi de neuf avec vos comptes ?";
+    } else if(hour >= 17 && hour < 21){
+      return "Bonsoir ! Prêt(e) à vérifier vos transactions ?";
+    } else {
+      return "Bonne nuit ! Quelque chose à noter avant de dormir ?";
+    }
+  }
+
+  // ============================================
   // INIT : Pré-charger les images
   // ============================================
   async function preloadImages(){
@@ -155,7 +172,11 @@
 
       // Autoplay du message d'accueil sur premier clic
       const msgEl = document.getElementById(messageId);
-      const initial = msgEl ? msgEl.textContent.trim() : '';
+      
+      // Mettre à jour avec le message varié selon l'heure
+      const greeting = getGreetingMessage();
+      if(msgEl) msgEl.textContent = greeting;
+      const initial = greeting;
 
       if(initial){
         const trySpeak = async () => {

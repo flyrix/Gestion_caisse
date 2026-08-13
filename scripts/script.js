@@ -41,14 +41,28 @@ const parler = (texte) => {
 // Initialisation DB et chargement des données
 window.addEventListener('load', async () => {
     try {
-        await SupabaseDB.init();
-        const session = await SupabaseDB.getSession();
-        if (!session) {
-            window.location.href = './index.html';
-            return;
+        // Vérifier si en mode guest/invité
+        const isGuest = Auth.isGuestMode && Auth.isGuestMode();
+        
+        if (!isGuest) {
+            // Mode normal : vérifier la session Supabase
+            await SupabaseDB.init();
+            const session = await SupabaseDB.getSession();
+            if (!session) {
+                window.location.href = './index.html';
+                return;
+            }
+            currentUser = session.user;
+        } else {
+            // Mode guest : utiliser la session stockée localement
+            const guestSession = Auth.getGuestSession && Auth.getGuestSession();
+            if (!guestSession) {
+                window.location.href = './index.html';
+                return;
+            }
+            currentUser = guestSession.user;
         }
 
-        currentUser = session.user;
         if (userEmailDisplay) {
             userEmailDisplay.textContent = currentUser.email || 'Utilisateur';
             authBar.hidden = false;
@@ -60,7 +74,14 @@ window.addEventListener('load', async () => {
                     SupabaseDB.unsubscribeChannel(realtimeChannel);
                     realtimeChannel = null;
                 }
-                await Auth.signOut();
+                // Nettoyer le mode guest s'il y a
+                if (isGuest) {
+                    localStorage.removeItem('is_guest_mode');
+                    localStorage.removeItem('guest_id');
+                    sessionStorage.removeItem('guest_session');
+                } else {
+                    await Auth.signOut();
+                }
                 window.location.href = './index.html';
             });
         }
@@ -69,34 +90,53 @@ window.addEventListener('load', async () => {
             await DB.init();
         }
 
-        const supaOps = await SupabaseDB.fetchOperations(currentUser.id);
-        if (Array.isArray(supaOps) && supaOps.length > 0) {
-            supaOps.forEach(o => {
-                if (o.type === 'credit') credits.push(o);
-                else if (o.type === 'monnaie') monnaies.push(o);
-            });
-        } else if (window.DB) {
-            const ops = await DB.getAll();
-            ops.forEach(o => {
-                if (o.type === 'credit') credits.push(o);
-                else if (o.type === 'monnaie') monnaies.push(o);
-            });
+        // Charger les opérations (Supabase si online + connected, sinon IndexedDB)
+        if (!isGuest) {
+            try {
+                const supaOps = await SupabaseDB.fetchOperations(currentUser.id);
+                if (Array.isArray(supaOps) && supaOps.length > 0) {
+                    supaOps.forEach(o => {
+                        if (o.type === 'credit') credits.push(o);
+                        else if (o.type === 'monnaie') monnaies.push(o);
+                    });
+                }
+            } catch (e) {
+                console.warn('Erreur Supabase fetchOperations :', e);
+                // Fallback sur IndexedDB
+                if (window.DB) {
+                    const ops = await DB.getAll();
+                    ops.forEach(o => {
+                        if (o.type === 'credit') credits.push(o);
+                        else if (o.type === 'monnaie') monnaies.push(o);
+                    });
+                }
+            }
+        } else {
+            // Mode guest : charger d'IndexedDB uniquement
+            if (window.DB) {
+                const ops = await DB.getAll();
+                ops.forEach(o => {
+                    if (o.type === 'credit') credits.push(o);
+                    else if (o.type === 'monnaie') monnaies.push(o);
+                });
+            }
         }
 
         trierOperations();
         
-        // Temps réel Supabase
-        try {
-            realtimeChannel = await SupabaseDB.subscribeToOperations(currentUser.id, async () => {
-                try {
-                    const fresh = await SupabaseDB.fetchOperations(currentUser.id);
-                    credits = [];
-                    monnaies = [];
-                    fresh.forEach(o => {
-                        if (o.type === 'credit') credits.push(o);
-                        else if (o.type === 'monnaie') monnaies.push(o);
-                    });
-                    trierOperations();
+        // Temps réel Supabase (si pas en mode guest)
+        if (!isGuest) {
+            try {
+                realtimeChannel = await SupabaseDB.subscribeToOperations(currentUser.id, async () => {
+                    try {
+                        const fresh = await SupabaseDB.fetchOperations(currentUser.id);
+                        credits = [];
+                        monnaies = [];
+                        fresh.forEach(o => {
+                            if (o.type === 'credit') credits.push(o);
+                            else if (o.type === 'monnaie') monnaies.push(o);
+                        });
+                        trierOperations();
                     afficherListes();
                 } catch (e) {
                     console.warn('Erreur Realtime', e);

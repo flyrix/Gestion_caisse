@@ -99,6 +99,45 @@ const Auth = (function() {
     }
   }
 
+  // Mode Invité : création d'une session locale sans Supabase
+  async function enterGuestMode() {
+    try {
+      // Créer un ID utilisateur "guest" unique basé sur timestamp + random
+      const guestId = 'guest_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+      localStorage.setItem('guest_id', guestId);
+      localStorage.setItem('is_guest_mode', 'true');
+      
+      // Créer un objet session simulé
+      const guestSession = {
+        user: {
+          id: guestId,
+          email: 'guest@offline',
+          aud: 'guest'
+        },
+        is_guest_mode: true
+      };
+      
+      // Stocker en session storage pour accès rapide
+      sessionStorage.setItem('guest_session', JSON.stringify(guestSession));
+      
+      return guestSession;
+    } catch (e) {
+      console.error('Erreur mode invité:', e.message);
+      return null;
+    }
+  }
+
+  // Vérifier si en mode guest
+  function isGuestMode() {
+    return localStorage.getItem('is_guest_mode') === 'true';
+  }
+
+  // Récupérer la session guest
+  function getGuestSession() {
+    const stored = sessionStorage.getItem('guest_session');
+    return stored ? JSON.parse(stored) : null;
+  }
+
   // Écouteur des changements d'état de l'authentification (login/logout)
   function onAuthStateChange(callback) {
     const client = getAuthClient();
@@ -115,7 +154,10 @@ const Auth = (function() {
     getSession,
     requireAuth,
     redirectIfAuthenticated,
-    onAuthStateChange
+    onAuthStateChange,
+    enterGuestMode,
+    isGuestMode,
+    getGuestSession
   };
 })();
 
@@ -262,6 +304,27 @@ if (document.body.contains(document.querySelector('#btn-principal'))) {
           return;
         }
         showMessage('Email de réinitialisation envoyé.');
+      });
+    }
+
+    // --- BOUTON MODE INVITÉ / HORS-LIGNE ---
+    const btnGuest = document.querySelector('#btn-guest');
+    if (btnGuest) {
+      btnGuest.addEventListener('click', async () => {
+        showMessage('Chargement du mode invité...');
+        try {
+          const guestSession = await Auth.enterGuestMode();
+          if (guestSession) {
+            // Rediriger vers l'app après un court délai
+            setTimeout(() => {
+              window.location.href = './page.html';
+            }, 500);
+          } else {
+            showMessage('Erreur lors de l\'activation du mode invité.', true);
+          }
+        } catch (err) {
+          showMessage(err.message, true);
+        }
       });
     }
   });

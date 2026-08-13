@@ -384,6 +384,8 @@ ul li button {
 .btn-regler { background-color: #1f8f55; }
 .btn-secondaire { background-color: #5d6d7e; }
 .btn-supprimer { background-color: #c0392b; }
+.btn-guest { background-color: #16a34a; color: white; border: none; padding: 10px 16px; font-size: 14px; font-weight: bold; border-radius: 6px; cursor: pointer; width: 100%; transition: background-color 0.2s ease; }
+.btn-guest:hover { background-color: #15803d; }
 
 /* --- RESPONSIVE MOBILE --- */
 @media (max-width: 420px) {
