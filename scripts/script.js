@@ -1,10 +1,14 @@
+/**
+ * APPLICATION CAISSE - LOGIQUE PRINCIPALE
+ */
+
 // 1. Initialisation des listes & filtres
 let credits = [];
 let monnaies = [];
 let currentUser = null;
 let realtimeChannel = null;
 let filtreActif = 'tous'; // 'tous', 'encours', 'soldes'
-let isGuestMode = false;  // Variable globale pour isGuest
+let isGuestMode = false;  // Variable globale pour le mode invité
 let guestId = null;       // ID guest pour la synchronisation
 
 // 2. Enregistrement du Service Worker (sw.js)
@@ -50,22 +54,30 @@ const parler = (texte) => {
 };
 
 // ==========================================
-// 🎯 SYNCHRONISATION MODE INVITÉ → SUPABASE
+// 🔄 SYNCHRONISATION MODE INVITÉ → SUPABASE
 // ==========================================
+
+/**
+ * Helper de récupération unifiée depuis IndexedDB
+ */
+async function getLocalOperations() {
+    if (!window.DB) return [];
+    if (typeof DB.getOperations === 'function') return await DB.getOperations();
+    if (typeof DB.getAll === 'function') return await DB.getAll();
+    return [];
+}
+
 /**
  * Transfère les opérations locales créées en Mode Invité vers Supabase
  */
 async function syncGuestDataToSupabase(supabaseUserId) {
-    if (!isGuestMode && !localStorage.getItem('guest_id')) return;
+    if (!localStorage.getItem('guest_id') && !isGuestMode) return;
     if (!navigator.onLine) return;
     
     try {
         console.log(`🔄 Sync: Transfert des données invité vers Supabase (User ID: ${supabaseUserId})`);
         
-        if (!window.DB) return;
-        
-        // Charger toutes les opérations enregistrées localement
-        const guestOps = await DB.getAll();
+        const guestOps = await getLocalOperations();
         
         if (!guestOps || guestOps.length === 0) {
             console.log('✅ Aucune donnée invité à synchroniser.');
@@ -123,6 +135,7 @@ async function verifySessionAndReload() {
 // Gestionnaires des événements Online / Offline
 window.addEventListener('online', async () => {
     console.log('✅ Connexion réseau rétablie');
+    isGuestMode = typeof Auth !== 'undefined' && Auth.isGuestMode && Auth.isGuestMode();
     if (!isGuestMode) {
         await verifySessionAndReload();
         if (currentUser && currentUser.id) {
@@ -145,7 +158,7 @@ window.addEventListener('load', async () => {
             await DB.init();
         }
 
-        // Vérifier si nous sommes en Mode Invité
+        // Détermination dynamique du mode via Auth
         isGuestMode = typeof Auth !== 'undefined' && Auth.isGuestMode && Auth.isGuestMode();
         
         if (!isGuestMode) {
@@ -161,11 +174,9 @@ window.addEventListener('load', async () => {
 
             if (!session) {
                 // Tentative de récupération locale avant redirection
-                if (window.DB) {
-                    const localOps = await DB.getAll();
-                    if (localOps && localOps.length > 0) {
-                        console.warn('Session expirée mais données locales détectées.');
-                    }
+                const localOps = await getLocalOperations();
+                if (localOps && localOps.length > 0) {
+                    console.warn('Session expirée mais données locales détectées.');
                 }
                 window.location.href = './index.html';
                 return;
@@ -177,10 +188,13 @@ window.addEventListener('load', async () => {
             const previousGuestId = localStorage.getItem('guest_id');
             if (previousGuestId && currentUser && currentUser.id) {
                 await syncGuestDataToSupabase(currentUser.id);
-                // Nettoyage des flags invité
-                localStorage.removeItem('is_guest_mode');
-                localStorage.removeItem('guest_id');
-                sessionStorage.removeItem('guest_session');
+                if (typeof Auth !== 'undefined' && typeof Auth.clearGuestState === 'function') {
+                    Auth.clearGuestState();
+                } else {
+                    localStorage.removeItem('is_guest_mode');
+                    localStorage.removeItem('guest_id');
+                    sessionStorage.removeItem('guest_session');
+                }
             }
 
         } else {
@@ -211,9 +225,13 @@ window.addEventListener('load', async () => {
                 }
                 
                 if (isGuestMode) {
-                    localStorage.removeItem('is_guest_mode');
-                    localStorage.removeItem('guest_id');
-                    sessionStorage.removeItem('guest_session');
+                    if (typeof Auth !== 'undefined' && typeof Auth.clearGuestState === 'function') {
+                        Auth.clearGuestState();
+                    } else {
+                        localStorage.removeItem('is_guest_mode');
+                        localStorage.removeItem('guest_id');
+                        sessionStorage.removeItem('guest_session');
+                    }
                     window.location.href = './index.html';
                 } else {
                     try {
@@ -227,66 +245,15 @@ window.addEventListener('load', async () => {
             });
         }
 
-        // Charger les opérations depuis la source appropriée
-        credits = [];
-        monnaies = [];
-
-        if (!isGuestMode && navigator.onLine) {
-            try {
-                const supaOps = await SupabaseDB.fetchOperations(currentUser.id);
-                if (Array.isArray(supaOps) && supaOps.length > 0) {
-                    supaOps.forEach(o => {
-                        if (o.type === 'credit') credits.push(o);
-                        else if (o.type === 'monnaie') monnaies.push(o);
-                    });
-                } else if (window.DB) {
-                    // Charger IndexedDB si Supabase retourne une liste vide
-                    const ops = await DB.getAll();
-                    ops.forEach(o => {
-                        if (o.type === 'credit') credits.push(o);
-                        else if (o.type === 'monnaie') monnaies.push(o);
-                    });
-                }
-            } catch (e) {
-                console.warn('Erreur Supabase fetchOperations, bascule sur IndexedDB :', e);
-                if (window.DB) {
-                    const ops = await DB.getAll();
-                    ops.forEach(o => {
-                        if (o.type === 'credit') credits.push(o);
-                        else if (o.type === 'monnaie') monnaies.push(o);
-                    });
-                }
-            }
-        } else {
-            // Chargement hors-ligne direct
-            if (window.DB) {
-                const ops = await DB.getAll();
-                ops.forEach(o => {
-                    if (o.type === 'credit') credits.push(o);
-                    else if (o.type === 'monnaie') monnaies.push(o);
-                });
-            }
-        }
-
-        trierOperations();
+        // Charger les données (Supabase si connecté & en ligne, sinon IndexedDB)
+        await chargerDonnees();
 
         // Abonnement Supabase Realtime (si connecté en ligne)
         if (!isGuestMode && navigator.onLine && typeof SupabaseDB !== 'undefined' && typeof SupabaseDB.subscribeToOperations === 'function') {
             try {
                 realtimeChannel = await SupabaseDB.subscribeToOperations(currentUser.id, async () => {
-                    try {
-                        const fresh = await SupabaseDB.fetchOperations(currentUser.id);
-                        credits = [];
-                        monnaies = [];
-                        fresh.forEach(o => {
-                            if (o.type === 'credit') credits.push(o);
-                            else if (o.type === 'monnaie') monnaies.push(o);
-                        });
-                        trierOperations();
-                        afficherListes();
-                    } catch (e) {
-                        console.warn('Erreur de rafraîchissement Realtime:', e);
-                    }
+                    await chargerDonnees();
+                    afficherListes();
                 });
             } catch (e) {
                 console.warn('Abonnement temps réel indisponible:', e);
@@ -303,6 +270,36 @@ window.addEventListener('load', async () => {
         afficherListes();
     }
 });
+
+// Helper de chargement et tri des opérations
+async function chargerDonnees() {
+    credits = [];
+    monnaies = [];
+    let data = [];
+
+    if (!isGuestMode && navigator.onLine && typeof SupabaseDB !== 'undefined') {
+        try {
+            data = await SupabaseDB.fetchOperations(currentUser.id);
+            if (!Array.isArray(data) || data.length === 0) {
+                data = await getLocalOperations();
+            }
+        } catch (e) {
+            console.warn('Erreur Supabase fetchOperations, bascule sur IndexedDB :', e);
+            data = await getLocalOperations();
+        }
+    } else {
+        data = await getLocalOperations();
+    }
+
+    if (Array.isArray(data)) {
+        data.forEach(o => {
+            if (o.type === 'credit') credits.push(o);
+            else if (o.type === 'monnaie') monnaies.push(o);
+        });
+    }
+
+    trierOperations();
+}
 
 // ==========================================
 // ANALYSEUR VOCAL NLU (AVEC DÉTECTION DU RÈGLEMENT)
@@ -408,7 +405,11 @@ async function automatiserReglementVocal(nom, somme, type) {
     if (opExistante) {
         opExistante.paye = true;
         
-        if (window.DB) await DB.update(opExistante).catch(e => console.warn(e));
+        if (window.DB) {
+            if (typeof DB.saveOperation === 'function') await DB.saveOperation(opExistante).catch(e => console.warn(e));
+            else if (typeof DB.update === 'function') await DB.update(opExistante).catch(e => console.warn(e));
+        }
+
         if (!isGuestMode && currentUser && typeof SupabaseDB !== 'undefined' && navigator.onLine) {
             SupabaseDB.updateOperation(opExistante, currentUser.id).catch(e => console.warn(e));
         }
@@ -418,7 +419,7 @@ async function automatiserReglementVocal(nom, somme, type) {
         parler(msg);
         afficherListes();
     } else {
-        // Enregistrer directement comme réglé si l'opération n'existait pas auparavant
+        // Enregistrer directement comme réglé si l'opération n'existait pas
         await enregistrerOperationVocal(nom, somme, type, true);
     }
 }
@@ -439,7 +440,10 @@ async function enregistrerOperationVocal(nom, somme, type, estPaye = false) {
     };
 
     try {
-        if (window.DB) await DB.addOperation(nouvelleOperation);
+        if (window.DB) {
+            if (typeof DB.saveOperation === 'function') await DB.saveOperation(nouvelleOperation);
+            else if (typeof DB.addOperation === 'function') await DB.addOperation(nouvelleOperation);
+        }
         
         if (!isGuestMode && currentUser && typeof SupabaseDB !== 'undefined' && navigator.onLine) {
             SupabaseDB.saveOperation(nouvelleOperation, currentUser.id).catch(err => console.warn(err));
@@ -492,7 +496,11 @@ async function reglerOperation(id, type) {
 
     operation.paye = !operation.paye;
     
-    if (window.DB) await DB.update(operation).catch(e => console.warn(e));
+    if (window.DB) {
+        if (typeof DB.saveOperation === 'function') await DB.saveOperation(operation).catch(e => console.warn(e));
+        else if (typeof DB.update === 'function') await DB.update(operation).catch(e => console.warn(e));
+    }
+
     if (!isGuestMode && currentUser && typeof SupabaseDB !== 'undefined' && navigator.onLine) {
         SupabaseDB.updateOperation(operation, currentUser.id).catch(e => console.warn(e));
     }
@@ -515,7 +523,11 @@ async function supprimerOperation(id, type) {
     if (type === 'credit') credits = credits.filter(e => e.id !== id);
     else monnaies = monnaies.filter(e => e.id !== id);
 
-    if (window.DB) await DB.remove(id).catch(e => console.warn(e));
+    if (window.DB) {
+        if (typeof DB.deleteOperation === 'function') await DB.deleteOperation(id).catch(e => console.warn(e));
+        else if (typeof DB.remove === 'function') await DB.remove(id).catch(e => console.warn(e));
+    }
+
     if (!isGuestMode && currentUser && typeof SupabaseDB !== 'undefined' && navigator.onLine) {
         SupabaseDB.deleteOperation(id, currentUser.id).catch(e => console.warn(e));
     }
@@ -671,9 +683,19 @@ if (btnEffacerRegles) {
         credits = credits.filter(o => !o.paye);
         monnaies = monnaies.filter(o => !o.paye);
 
-        if (window.DB) await DB.removeMany(ids).catch(e => console.warn(e));
+        if (window.DB) {
+            if (typeof DB.removeMany === 'function') await DB.removeMany(ids).catch(e => console.warn(e));
+            else if (typeof DB.deleteOperation === 'function') {
+                for (const id of ids) await DB.deleteOperation(id).catch(e => console.warn(e));
+            }
+        }
+
         if (!isGuestMode && currentUser && typeof SupabaseDB !== 'undefined' && navigator.onLine) {
-            SupabaseDB.deleteOperations(ids, currentUser.id).catch(e => console.warn(e));
+            if (typeof SupabaseDB.deleteOperations === 'function') {
+                SupabaseDB.deleteOperations(ids, currentUser.id).catch(e => console.warn(e));
+            } else {
+                for (const id of ids) SupabaseDB.deleteOperation(id, currentUser.id).catch(e => console.warn(e));
+            }
         }
 
         parler("Les opérations réglées ont été supprimées.");
