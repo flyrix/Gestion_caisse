@@ -1,97 +1,130 @@
-const CACHE_NAME = 'caisse-v4'; // Version incrémentée pour invalider l'ancien cache
+/**
+ * SERVICE WORKER - APPLICATION CAISSE PWA
+ * Gestion robuste du cache hors-ligne, du SDK Supabase et des CDNs.
+ */
 
-// 1. Liste exhaustive de tous les fichiers nécessaires à l'application hors-ligne
-const ASSETS_TO_CACHE = [
+const CACHE_NAME = 'caisse-pwa-v1.0.6';
+
+// Liste des ressources à pré-cacher obligatoirement
+const STATIC_ASSETS = [
   './',
-  './index.html',
   './page.html',
-  './styles/style.css',
   './styles/style.css?v=1.0.5',
-  './scripts/script.js',
-  './scripts/script.js?v=1.0.3',
-  './scripts/auth.js',
-  './scripts/db.js',
   './scripts/supabase-config.js',
   './scripts/supabase.js',
+  './scripts/db.js',
+  './scripts/auth.js',
   './scripts/avatar-visemes.js?v=1.0.0',
+  './scripts/script.js?v=1.0.3',
   './scripts/ai-vocal.js?v=1.0.1',
-  './manifest.json',
-  './icons/icon-192.png',
-  './icons/icon-512.png',
-  './icons/avatar-visemes/closed.png',
-  './icons/avatar-visemes/smile-closed.png',
-  './icons/avatar-visemes/slight-open.png',
-  './icons/avatar-visemes/medium-open.png'
+  // CDNs externes indispensables (Supabase UMD et Bodymovin Lottie)
+  'https://unpkg.com/@supabase/supabase-js@2.112.3/dist/umd/supabase.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/bodymovin/5.12.2/lottie.min.js'
 ];
 
-// 2. Installation et mise en cache initiale
+// 1. INSTALLATION : Mise en cache initiale des fichiers statiques et CDNs
 self.addEventListener('install', (event) => {
+  console.log('[SW] Installation du Service Worker...');
+  self.skipWaiting(); // Active immédiatement le SW sans attendre le redémarrage
+
   event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then(cache => {
-        console.log('[SW] Mise en cache des ressources locales...');
-        return cache.addAll(ASSETS_TO_CACHE);
-      })
-      .catch(err => console.warn('[SW] Erreur lors de l installation du cache :', err))
+    caches.open(CACHE_NAME).then(async (cache) => {
+      console.log('[SW] Mise en cache des ressources statiques et CDNs');
+      // Boucle sécurisée : évite de bloquer l'installation si un seul asset échoue
+      for (const asset of STATIC_ASSETS) {
+        try {
+          await cache.add(asset);
+        } catch (err) {
+          console.warn(`[SW] Impossible de pré-cacher l'élément : ${asset}`, err);
+        }
+      }
+    })
   );
-  self.skipWaiting();
 });
 
-// 3. Activation et nettoyage des anciens caches
+// 2. ACTIVATION : Nettoyage des anciens caches
 self.addEventListener('activate', (event) => {
+  console.log('[SW] Activation du nouveau Service Worker');
   event.waitUntil(
-    caches.keys().then(keys => Promise.all(
-      keys.filter(k => k !== CACHE_NAME).map(k => {
-        console.log(`[SW] Suppression de l ancien cache : ${k}`);
-        return caches.delete(k);
-      })
-    ))
+    caches.keys().then((cacheNames) => {
+      return Promise.all(
+        cacheNames.map((cache) => {
+          if (cache !== CACHE_NAME) {
+            console.log('[SW] Suppression de l\'ancien cache :', cache);
+            return caches.delete(cache);
+          }
+        })
+      );
+    }).then(() => self.clients.claim()) // Prend le contrôle direct de tous les onglets ouverts
   );
-  self.clients.claim();
 });
 
-// 4. Interception sécurisée des requêtes réseau
+// 3. INTERCEPTION DES REQUÊTES (FETCH)
 self.addEventListener('fetch', (event) => {
-  const req = event.request;
+  const request = event.request;
+  const url = new URL(request.url);
 
-  // Traiter uniquement les requêtes GET relatives au même domaine
-  if (req.method === 'GET' && req.url.startsWith(self.location.origin)) {
-    event.respondWith(
-      caches.match(req).then(cachedRes => {
-        // A. Si la ressource est présente en cache, la servir immédiatement
-        if (cachedRes) {
-          return cachedRes;
+  // LAISSER PASSER : API REST et WebSockets Supabase (Gestion en direct par SupabaseDB / IndexedDB)
+  if (url.protocol === 'ws:' || url.protocol === 'wss:' || url.hostname.includes('supabase.co')) {
+    return;
+  }
+
+  // STRATÉGIE : Cache First (Priorité au cache, repli sur le réseau)
+  event.respondWith(
+    caches.match(request).then(async (cachedResponse) => {
+      // Si la ressource est présente dans le cache, on la renvoie immédiatement
+      if (cachedResponse) {
+        return cachedResponse;
+      }
+
+      // Sinon, tenter de récupérer la ressource depuis le réseau
+      try {
+        const networkResponse = await fetch(request);
+
+        // Si la réponse est valide (200 OK), on met une copie en cache
+        if (networkResponse && networkResponse.status === 200) {
+          const responseToCache = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(request, responseToCache);
+          });
         }
 
-        // B. Sinon, tenter de la récupérer sur le réseau
-        return fetch(req)
-          .then(networkRes => {
-            // Mettre en cache uniquement les réponses valides (code 200)
-            if (networkRes && networkRes.status === 200 && networkRes.type === 'basic') {
-              const resClone = networkRes.clone();
-              caches.open(CACHE_NAME).then(cache => cache.put(req, resClone));
-            }
-            return networkRes;
-          })
-          .catch(() => {
-            // C. Réseau indisponible (Mode Hors-ligne)
+        return networkResponse;
 
-            // Si c'est une navigation entre pages HTML :
-            if (req.mode === 'navigate') {
-              return caches.match('./page.html').then(pageRes => {
-                return pageRes || caches.match('./index.html');
-              });
-            }
+      } catch (error) {
+        console.warn(`[SW] Échec du réseau pour : ${request.url}`);
 
-            // Pour tout autre fichier (JS, CSS, images) non présent dans le cache,
-            // retourner une Response 503 propre pour éviter un retour 'undefined'
-            return new Response('Ressource indisponible hors-ligne', {
-              status: 503,
-              statusText: 'Service Unavailable',
-              headers: new Headers({ 'Content-Type': 'text/plain; charset=utf-8' })
-            });
+        // CORRECTION MAJEURE : Garantir QU'UNE RESPONSE VALIDE est TOUJOURS renvoyée (Jamais undefined)
+        
+        // 1. Pour les scripts JS
+        if (request.destination === 'script' || url.pathname.endsWith('.js')) {
+          return new Response('/* Resource JavaScript indisponible en mode hors-ligne */', {
+            status: 200,
+            headers: { 'Content-Type': 'application/javascript' }
           });
-      })
-    );
-  }
+        }
+
+        // 2. Pour les feuilles de style CSS
+        if (request.destination === 'style' || url.pathname.endsWith('.css')) {
+          return new Response('/* Resource CSS indisponible en mode hors-ligne */', {
+            status: 200,
+            headers: { 'Content-Type': 'text/css' }
+          });
+        }
+
+        // 3. Pour la navigation HTML
+        if (request.mode === 'navigate') {
+          const pageCache = await caches.match('./page.html') || await caches.match('./');
+          if (pageCache) return pageCache;
+        }
+
+        // 4. Fallback par défaut pour toutes les autres ressources
+        return new Response('Ressource indisponible hors-ligne.', {
+          status: 503,
+          statusText: 'Service Unavailable',
+          headers: new Headers({ 'Content-Type': 'text/plain; charset=utf-8' })
+        });
+      }
+    })
+  );
 });
