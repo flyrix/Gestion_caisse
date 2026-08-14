@@ -1,6 +1,6 @@
 /**
  * MODULE AUTHENTIFICATION (Utilise le contrôleur SupabaseDB)
- * Inclut la gestion du mode Hors-Ligne et la synchronisation des données Invité.
+ * Inclut la gestion du mode Hors-Ligne Automatique et la synchronisation des données Invité.
  */
 const Auth = (function() {
   
@@ -23,20 +23,17 @@ const Auth = (function() {
     return null;
   }
 
-  // Synchronise les données locales saisies en Mode Invité vers le compte connecté
+  // Synchronise les données locales saisies en Mode Invité/Hors-ligne vers le compte connecté
   async function syncGuestDataToAccount(userId) {
     if (!navigator.onLine) return;
     
     try {
-      // Vérifier si IndexedDB ou la base locale (DB / DBLocal) possède des opérations d'invité
       if (typeof DB !== 'undefined' && typeof DB.getOperations === 'function') {
         const localOps = await DB.getOperations();
-        
-        // CORRECTION 1 : Remplacement de un-syncedOps par unSyncedOps
         const unSyncedOps = localOps.filter(op => !op.user_id || op.user_id.startsWith('guest_'));
 
         if (unSyncedOps.length > 0) {
-          console.log(`[Sync] Synchronisation de ${unSyncedOps.length} opération(s) invité vers le compte...`);
+          console.log(`[Sync Auto] Synchronisation de ${unSyncedOps.length} opération(s) hors-ligne vers Supabase...`);
           
           for (const op of unSyncedOps) {
             delete op.id; // Laisse Supabase générer de nouveaux IDs
@@ -45,11 +42,11 @@ const Auth = (function() {
               await SupabaseDB.saveOperation(op);
             }
           }
-          console.log("[Sync] Migration des données locales réussie !");
+          console.log("[Sync Auto] Migration des données locales réussie !");
         }
       }
     } catch (err) {
-      console.warn("Erreur lors de la synchronisation des données invité :", err.message);
+      console.warn("Erreur lors de la synchronisation des données hors-ligne :", err.message);
     }
   }
 
@@ -78,7 +75,7 @@ const Auth = (function() {
   // Connexion de l'utilisateur (gère l'E-mail ou le Pseudo)
   async function signIn(identifier, password) {
     if (!navigator.onLine) {
-      throw new Error("Connexion impossible sans réseau. Utilisez le 'Mode invité' hors-ligne.");
+      throw new Error("Connexion réseau impossible. Mode hors-ligne actif.");
     }
     
     const client = getAuthClient();
@@ -94,17 +91,16 @@ const Auth = (function() {
     
     const res = await client.auth.signInWithPassword({ email, password });
     
-    // Si la connexion réussit et que l'utilisateur était en mode invité, synchroniser
-    if (res.data && res.data.session && isGuestMode()) {
+    // Si la connexion réussit, synchroniser les données créées hors-ligne
+    if (res.data && res.data.session) {
       await syncGuestDataToAccount(res.data.session.user.id);
     }
 
     return res;
   }
 
-  // Déconnexion de la session actuelle (Supabase ou Mode Invité)
+  // Déconnexion
   async function signOut() {
-    // Si nous sommes en mode invité, réinitialiser la session locale
     if (isGuestMode()) {
       localStorage.removeItem('is_guest_mode');
       localStorage.removeItem('guest_id');
@@ -119,48 +115,68 @@ const Auth = (function() {
       window.location.href = './index.html';
       return res;
     } else {
-      // Fallback si hors-ligne lors du logout
       window.location.href = './index.html';
       return { error: null };
     }
   }
 
-  // Mode Invité : vérification
+  // Mode Hors-ligne / Invité : vérification
   function isGuestMode() {
     return localStorage.getItem('is_guest_mode') === 'true';
   }
 
-  // Mode Invité : récupération de la session locale
+  // Mode Hors-ligne / Invité : récupération de la session locale
   function getGuestSession() {
     const stored = sessionStorage.getItem('guest_session');
     if (stored) {
       try {
         return JSON.parse(stored);
       } catch (e) {
-        console.error("Erreur de lecture de la session invité:", e);
+        console.error("Erreur de lecture de la session locale:", e);
       }
     }
-    // Si le flag localStorage existe mais que sessionStorage a été réinitialisé
-    if (isGuestMode()) {
-      const guestId = localStorage.getItem('guest_id') || ('guest_' + Date.now());
-      return {
-        user: { id: guestId, email: 'guest@offline', aud: 'guest' },
-        is_guest_mode: true
-      };
-    }
-    return null;
+    
+    // Si absent mais flag présent, régénérer une session locale
+    const guestId = localStorage.getItem('guest_id') || ('guest_' + Date.now());
+    return {
+      user: { id: guestId, email: 'invito@hors-ligne.local', aud: 'guest' },
+      is_guest_mode: true
+    };
   }
 
-  // Récupération sécurisée de la session active (Supabase ou Invité)
-  async function getSession() {
-    // 1. Priorité au mode invité si activé
-    if (isGuestMode()) {
-      return getGuestSession();
-    }
-
-    // Si totalement hors-ligne et pas en mode invité, retourner null
-    if (!navigator.onLine) {
+  // Mode Hors-ligne : activation automatique de la session locale
+  async function enterGuestMode() {
+    try {
+      let guestId = localStorage.getItem('guest_id');
+      if (!guestId) {
+        guestId = 'guest_' + Date.now() + '_' + Math.random().toString(36).substring(2, 11);
+        localStorage.setItem('guest_id', guestId);
+      }
+      
+      localStorage.setItem('is_guest_mode', 'true');
+      
+      const guestSession = {
+        user: {
+          id: guestId,
+          email: 'invito@hors-ligne.local',
+          aud: 'guest'
+        },
+        is_guest_mode: true
+      };
+      
+      sessionStorage.setItem('guest_session', JSON.stringify(guestSession));
+      return guestSession;
+    } catch (e) {
+      console.error('Erreur activation automatique mode hors-ligne:', e.message);
       return null;
+    }
+  }
+
+  // Récupération de la session active (Supabase ou Locale Hors-ligne)
+  async function getSession() {
+    // 1. Priorité au mode invité/hors-ligne si actif ou si hors-ligne
+    if (isGuestMode() || !navigator.onLine) {
+      return getGuestSession();
     }
 
     // 2. Vérifier avec SupabaseDB si disponible
@@ -180,16 +196,24 @@ const Auth = (function() {
         const { data, error } = await client.auth.getSession();
         if (!error && data) return data.session;
       } catch (e) {
-        console.warn("Impossible de joindre Supabase pour la vérification de session (Hors-ligne).");
+        console.warn("Impossible de joindre Supabase.");
       }
     }
 
     return null;
   }
 
-  // Protection des pages privées : redirige vers l'accueil si non connecté
+  // Protection des pages privées (page.html) : Bascule AUTO en hors-ligne si pas de réseau
   async function requireAuth() {
-    const session = await getSession();
+    let session = await getSession();
+
+    // Si pas de session et HORS-LIGNE -> Activation automatique du mode hors-ligne
+    if (!session && !navigator.onLine) {
+      console.log("[Auth Auto] Hors-ligne détecté : Bascule automatique en mode local.");
+      session = await enterGuestMode();
+      return session;
+    }
+
     if (!session && !isGuestMode()) {
       window.location.href = './index.html';
       return null;
@@ -197,9 +221,17 @@ const Auth = (function() {
     return session;
   }
 
-  // Protection de la page d'accueil : redirige vers le carnet si déjà connecté
+  // Protection de la page de connexion (index.html) : Redirection AUTO si hors-ligne
   async function redirectIfAuthenticated() {
     try {
+      // SI HORS-LIGNE -> Redirection AUTOMATIQUE vers page.html sans bloquer l'utilisateur
+      if (!navigator.onLine) {
+        console.log("[Auth Auto] Réseau indisponible. Redirection automatique vers la caisse hors-ligne...");
+        await enterGuestMode();
+        window.location.href = './page.html';
+        return getGuestSession();
+      }
+
       const session = await getSession();
       if (session) {
         window.location.href = './page.html';
@@ -211,38 +243,7 @@ const Auth = (function() {
     }
   }
 
-  // Mode Invité : création d'une session locale sans Supabase
-  async function enterGuestMode() {
-    try {
-      let guestId = localStorage.getItem('guest_id');
-      if (!guestId) {
-        guestId = 'guest_' + Date.now() + '_' + Math.random().toString(36).substring(2, 11);
-        localStorage.setItem('guest_id', guestId);
-      }
-      
-      localStorage.setItem('is_guest_mode', 'true');
-      
-      // Créer un objet session simulé
-      const guestSession = {
-        user: {
-          id: guestId,
-          email: 'guest@offline',
-          aud: 'guest'
-        },
-        is_guest_mode: true
-      };
-      
-      // Stocker en session storage pour accès rapide
-      sessionStorage.setItem('guest_session', JSON.stringify(guestSession));
-      
-      return guestSession;
-    } catch (e) {
-      console.error('Erreur mode invité:', e.message);
-      return null;
-    }
-  }
-
-  // Écouteur des changements d'état de l'authentification (login/logout)
+  // Écouteur des changements d'état d'authentification Supabase
   function onAuthStateChange(callback) {
     const client = getAuthClient();
     if (client) {
@@ -250,7 +251,6 @@ const Auth = (function() {
     }
   }
 
-  // Exposition des fonctions publiques
   return {
     signUp,
     signIn,
@@ -266,19 +266,32 @@ const Auth = (function() {
 })();
 
 /**
- * GESTION DYNAMIQUE DE L'INTERFACE GRAPHIQUE (DOM)
- * S'exécute uniquement si nous sommes sur la page index.html (page d'authentification)
+ * DÉTECTION ET ÉCOUTE AUTOMATIQUE DE L'ÉTAT DU RÉSEAU (ONLINE / OFFLINE)
  */
-// CORRECTION 2 : Vérification directe de l'élément pour éviter les erreurs null dans le DOM
+window.addEventListener('offline', async () => {
+  console.warn("📱 [Réseau] Connexion perdue. Passage automatique en mode hors-ligne.");
+  await Auth.enterGuestMode();
+});
+
+window.addEventListener('online', async () => {
+  console.log("🌐 [Réseau] Connexion internet rétablie !");
+  // Si un compte Supabase est connecté, tenter de synchroniser les données saisies hors-ligne
+  const session = await Auth.getSession();
+  if (session && session.user && !session.is_guest_mode) {
+    await syncGuestDataToAccount(session.user.id);
+  }
+});
+
+/**
+ * GESTION DYNAMIQUE DE L'INTERFACE GRAPHIQUE (DOM index.html)
+ */
 if (document.querySelector('#btn-principal')) {
   window.addEventListener('DOMContentLoaded', async () => {
-    // Si l'utilisateur a déjà un jeton de session valide ou est invité, on l'envoie sur le carnet
+    // Vérification initiale : Si hors-ligne, cette fonction redirige automatiquement vers page.html
     await Auth.redirectIfAuthenticated();
 
-    // Variable d'état pour suivre le mode actuel (true = Connexion, false = Inscription)
     let isLoginMode = true;
 
-    // Sélection des éléments du DOM
     const authTitle = document.querySelector('#auth-title');
     const authDesc = document.querySelector('#auth-desc');
     const labelIdentifier = document.querySelector('#label-identifier');
@@ -292,7 +305,6 @@ if (document.querySelector('#btn-principal')) {
     const btnReset = document.querySelector('#btn-reset');
     const messageBox = document.querySelector('#auth-message');
 
-    // Fonction utilitaire pour afficher les messages de retour à l'utilisateur
     const showMessage = (text, isError = false) => {
       if (messageBox) {
         messageBox.textContent = text;
@@ -300,12 +312,6 @@ if (document.querySelector('#btn-principal')) {
       }
     };
 
-    // Alerte automatique si l'utilisateur ouvre la page hors-ligne
-    if (!navigator.onLine) {
-      showMessage("📱 Vous êtes hors-ligne. Utilisez le 'Mode invité' ci-dessous pour accéder à vos données locales.", false);
-    }
-
-    // Fonction pour basculer visuellement l'interface entre Connexion et Inscription
     const basculerMode = () => {
       isLoginMode = !isLoginMode;
       if (messageBox) messageBox.textContent = "";
@@ -331,24 +337,16 @@ if (document.querySelector('#btn-principal')) {
       }
     };
 
-    // Écouteur sur le bouton secondaire pour changer de mode
     if (btnBasculer) btnBasculer.addEventListener('click', basculerMode);
 
-    // Écouteur sur le bouton principal (Exécute soit la connexion, soit l'inscription)
     if (btnPrincipal) {
       btnPrincipal.addEventListener('click', async () => {
         const identifier = inputIdentifier ? inputIdentifier.value.trim() : '';
         const password = passwordField ? passwordField.value.trim() : '';
 
         if (isLoginMode) {
-          // --- TRAITEMENT DE LA CONNEXION ---
           if (!identifier || !password) {
             showMessage('Veuillez renseigner votre identifiant et votre mot de passe.', true);
-            return;
-          }
-
-          if (!navigator.onLine) {
-            showMessage("Impossible de se connecter sans réseau. Cliquez sur 'Utiliser sans connexion'.", true);
             return;
           }
 
@@ -361,7 +359,6 @@ if (document.querySelector('#btn-principal')) {
               return;
             }
             if (data && data.session) {
-              // Nettoyage des flags du Mode Invité lors de la connexion réussie
               localStorage.removeItem('is_guest_mode');
               localStorage.removeItem('guest_id');
               sessionStorage.removeItem('guest_session');
@@ -374,7 +371,6 @@ if (document.querySelector('#btn-principal')) {
             showMessage(err.message, true);
           }
         } else {
-          // --- TRAITEMENT DE L'INSCRIPTION ---
           const username = inputUsername ? inputUsername.value.trim() : '';
           
           if (!identifier || !password || !username) {
@@ -386,11 +382,6 @@ if (document.querySelector('#btn-principal')) {
             return;
           }
 
-          if (!navigator.onLine) {
-            showMessage("Impossible de créer un compte hors-ligne.", true);
-            return;
-          }
-          
           showMessage('Création du compte en cours...');
           
           try {
@@ -409,14 +400,8 @@ if (document.querySelector('#btn-principal')) {
       });
     }
 
-    // --- TRAITEMENT DU MOT DE PASSE OUBLIÉ ---
     if (btnReset) {
       btnReset.addEventListener('click', async () => {
-        if (!navigator.onLine) {
-          showMessage("Action impossible en mode hors-ligne.", true);
-          return;
-        }
-
         const identifier = inputIdentifier ? inputIdentifier.value.trim() : '';
         if (!identifier || !identifier.includes('@')) {
           showMessage('Veuillez entrer votre adresse email dans le champ du haut pour réinitialiser le mot de passe.', true);
@@ -444,23 +429,11 @@ if (document.querySelector('#btn-principal')) {
       });
     }
 
-    // --- BOUTON MODE INVITÉ / HORS-LIGNE ---
     const btnGuest = document.querySelector('#btn-guest');
     if (btnGuest) {
       btnGuest.addEventListener('click', async () => {
-        showMessage('Activation du mode invité...');
-        try {
-          const guestSession = await Auth.enterGuestMode();
-          if (guestSession) {
-            setTimeout(() => {
-              window.location.href = './page.html';
-            }, 300);
-          } else {
-            showMessage('Erreur lors de l\'activation du mode invité.', true);
-          }
-        } catch (err) {
-          showMessage(err.message, true);
-        }
+        await Auth.enterGuestMode();
+        window.location.href = './page.html';
       });
     }
   });
