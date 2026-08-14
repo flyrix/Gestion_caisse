@@ -1,6 +1,7 @@
 /**
  * MODULE AUTHENTIFICATION
- * Gestion automatique de la bascule Online/Offline et synchronisation transparente.
+ * Gestion automatique et transparente de la bascule Online / Offline
+ * avec synchronisation bidirectionnelle IndexedDB <-> Supabase.
  */
 const Auth = (function() {
 
@@ -55,6 +56,12 @@ const Auth = (function() {
     };
   }
 
+  // Nettoie tous les jetons et états du mode invité/hors-ligne
+  function clearGuestState() {
+    localStorage.removeItem('is_guest_mode');
+    sessionStorage.removeItem('guest_session');
+  }
+
   // Synchronise les données IndexedDB créées en mode hors-ligne vers Supabase
   async function syncGuestDataToAccount(userId) {
     if (!navigator.onLine) return;
@@ -62,6 +69,7 @@ const Auth = (function() {
     try {
       if (typeof DB !== 'undefined' && typeof DB.getOperations === 'function') {
         const localOps = await DB.getOperations();
+        
         // Filtrer les opérations qui appartiennent au mode hors-ligne / invité
         const unSyncedOps = localOps.filter(op => !op.user_id || op.user_id.startsWith('guest_'));
 
@@ -69,22 +77,29 @@ const Auth = (function() {
           console.log(`[Sync Auto] Synchronisation de ${unSyncedOps.length} opération(s) hors-ligne vers Supabase...`);
 
           for (const op of unSyncedOps) {
-            // On prépare la donnée pour Supabase
+            const oldLocalId = op.id;
+            
+            // Préparer la donnée pour Supabase
             const payload = { ...op, user_id: userId };
             delete payload.id; // Supabase attribue son propre ID
 
             // 1. Enregistrement sur le serveur Supabase
+            let savedRecord = null;
             if (typeof SupabaseDB !== 'undefined' && typeof SupabaseDB.saveOperation === 'function') {
-              await SupabaseDB.saveOperation(payload);
+              savedRecord = await SupabaseDB.saveOperation(payload);
             }
 
-            // 2. Mise à jour locale dans IndexedDB avec le vrai user_id
-            op.user_id = userId;
+            // 2. Nettoyage & ré-assignation locale dans IndexedDB
+            if (typeof DB.deleteOperation === 'function' && oldLocalId) {
+              await DB.deleteOperation(oldLocalId);
+            }
+            
+            const updatedOp = savedRecord || { ...payload, id: oldLocalId || Date.now() };
             if (typeof DB.saveOperation === 'function') {
-              await DB.saveOperation(op);
+              await DB.saveOperation(updatedOp);
             }
           }
-          console.log("[Sync Auto] Migration réussie ! Toutes les données hors-ligne sont envoyées à Supabase.");
+          console.log("[Sync Auto] Migration réussie ! Toutes les données hors-ligne ont été synchronisées.");
         }
       }
     } catch (err) {
@@ -123,9 +138,8 @@ const Auth = (function() {
 
     const res = await client.auth.signInWithPassword({ email, password });
     if (res.data && res.data.session) {
-      localStorage.removeItem('is_guest_mode');
+      clearGuestState();
       localStorage.removeItem('guest_id');
-      sessionStorage.removeItem('guest_session');
       await syncGuestDataToAccount(res.data.session.user.id);
     }
     return res;
@@ -133,9 +147,8 @@ const Auth = (function() {
 
   // Déconnexion
   async function signOut() {
-    localStorage.removeItem('is_guest_mode');
+    clearGuestState();
     localStorage.removeItem('guest_id');
-    sessionStorage.removeItem('guest_session');
 
     const client = getAuthClient();
     if (client) await client.auth.signOut();
@@ -146,28 +159,24 @@ const Auth = (function() {
 
   // Obtention de la session active
   async function getSession() {
-    // Si hors-ligne, forcer la session invité
-    if (!navigator.onLine) {
-      return getGuestSession();
-    }
-
-    // Si en ligne, chercher la vraie session Supabase
-    const client = getAuthClient();
-    if (client) {
-      try {
-        const { data } = await client.auth.getSession();
-        if (data && data.session) {
-          // On supprime le flag invité si la session utilisateur existe
-          localStorage.removeItem('is_guest_mode');
-          return data.session;
+    // 1. Si en ligne, prioriser STRICTEMENT la session Supabase
+    if (navigator.onLine) {
+      const client = getAuthClient();
+      if (client) {
+        try {
+          const { data, error } = await client.auth.getSession();
+          if (!error && data && data.session) {
+            clearGuestState(); // Nettoie le mode invité si un compte est connecté
+            return data.session;
+          }
+        } catch (e) {
+          console.warn("[Auth] Erreur lors de la récupération de la session Supabase.");
         }
-      } catch (e) {
-        console.warn("[Auth] Impossible d'atteindre Supabase.");
       }
     }
 
-    // Repli en mode invité si explicitement activé
-    if (isGuestMode()) {
+    // 2. Si hors-ligne OU si le mode invité est toujours explicitement actif sans réseau
+    if (!navigator.onLine || isGuestMode()) {
       return getGuestSession();
     }
 
@@ -213,7 +222,8 @@ const Auth = (function() {
     isGuestMode,
     getGuestSession,
     syncGuestDataToAccount,
-    getAuthClient
+    getAuthClient,
+    clearGuestState
   };
 })();
 
@@ -221,31 +231,30 @@ const Auth = (function() {
  * ÉCOUTEURS D'ÉVÉNEMENTS RÉSEAU AUTOMATIQUES
  */
 window.addEventListener('offline', async () => {
-  console.warn("📱 [Réseau] Déconnexion détectée. Passage en mode hors-ligne.");
+  console.warn("📱 [Réseau] Connexion perdue. Bascule automatique en mode hors-ligne.");
   await Auth.enterGuestMode();
 });
 
 window.addEventListener('online', async () => {
   console.log("🌐 [Réseau] Connexion rétablie ! Analyse de la session...");
 
+  // A. Supprimer le drapeau de session hors-ligne
+  Auth.clearGuestState();
+
+  // B. Tenter de réhydrater la session Supabase active
   const client = Auth.getAuthClient();
   if (client) {
     try {
-      // 1. Récupérer la session Supabase du compte
       const { data } = await client.auth.getSession();
-      
+
       if (data && data.session && data.session.user) {
         const userId = data.session.user.id;
-        console.log(`[Réseau] Session retrouvée pour : ${data.session.user.email}`);
+        console.log(`✅ [Réseau] Session retrouvée pour : ${data.session.user.email}`);
 
-        // 2. Nettoyer le drapeau hors-ligne
-        localStorage.removeItem('is_guest_mode');
-        sessionStorage.removeItem('guest_session');
-
-        // 3. Envoyer les données créées hors-ligne vers Supabase
+        // C. Synchroniser immédiatement les opérations locales vers le serveur
         await Auth.syncGuestDataToAccount(userId);
 
-        // 4. Recharger la page pour afficher l'application en mode connecté
+        // D. Recharger l'application pour repasser en mode utilisateur connecté
         window.location.reload();
         return;
       }
@@ -254,5 +263,6 @@ window.addEventListener('online', async () => {
     }
   }
 
-  console.log("[Réseau] Pas de compte utilisateur actif. Maintien du mode invité.");
+  console.log("[Réseau] Aucun compte connecté actif. Redirection vers la page de connexion...");
+  window.location.reload();
 });
