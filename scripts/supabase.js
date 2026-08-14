@@ -180,4 +180,5 @@ const SupabaseDB = (function() {
     createProfile,
     getEmailByUsername
   };
-})(); // L'accolade ferme maintenant parfaitement le module tout à la fin
+})();
+window.SupabaseDB = SupabaseDB;
