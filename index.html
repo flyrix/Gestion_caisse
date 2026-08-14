@@ -10,37 +10,53 @@
     <title>Connexion - Gestion de Caisse</title>
 </head>
 <body>
-    <h1 id="auth-title">Connexion</h1>
+    <main class="auth-container">
+        <h1 id="auth-title">Connexion</h1>
 
-    <div class="auth-card">
-        <p id="auth-desc" class="auth-description">Connectez-vous pour accéder à votre carnet de caisse et synchroniser vos opérations.</p>
+        <div class="auth-card">
+            <p id="auth-desc" class="auth-description">Connectez-vous pour accéder à votre carnet de caisse et synchroniser vos opérations.</p>
 
-        <!-- Champ Identifiant (Sert d'E-mail pour l'inscription, ou d'E-mail/Pseudo pour la connexion) -->
-        <label id="label-identifier" for="identifier">Email ou nom d'utilisateur</label>
-        <input type="text" id="identifier" placeholder="votre@exemple.com ou monutilisateur" />
+            <form id="auth-form" onsubmit="return false;">
+                <!-- Champ Identifiant (Sert d'E-mail pour l'inscription, ou d'E-mail/Pseudo pour la connexion) -->
+                <label id="label-identifier" for="identifier">Email ou nom d'utilisateur</label>
+                <input type="text" id="identifier" name="identifier" autocomplete="username" placeholder="votre@exemple.com ou monutilisateur" required />
 
-        <label for="password">Mot de passe</label>
-        <input type="password" id="password" placeholder="Mot de passe" />
+                <label for="password">Mot de passe</label>
+                <input type="password" id="password" name="password" autocomplete="current-password" placeholder="Mot de passe" required />
 
-        <!-- Ce bloc sera masqué en mode connexion et affiché en mode inscription -->
-        <div id="signup-profile-group" hidden>
-            <label for="signup-username">Nom d'utilisateur (Pseudo)</label>
-            <input type="text" id="signup-username" placeholder="Choisissez un nom d'utilisateur" />
+                <!-- Ce bloc sera masqué en mode connexion et affiché en mode inscription -->
+                <div id="signup-profile-group" hidden>
+                    <label for="signup-username">Nom d'utilisateur (Pseudo)</label>
+                    <input type="text" id="signup-username" name="signup-username" autocomplete="nickname" placeholder="Choisissez un nom d'utilisateur" />
+                </div>
+
+                <div class="auth-actions" style="margin-top: 15px; display: flex; flex-direction: column; gap: 10px;">
+                    <button id="btn-principal" type="submit">Se connecter</button>
+                    <button id="btn-basculer" type="button" class="btn-secondaire">Pas de compte ? S'inscrire</button>
+                </div>
+            </form>
+
+            <hr style="border: 0; border-top: 1px solid #eee; margin: 15px 0;" />
+            <button id="btn-reset" type="button" class="btn-secondaire">Mot de passe oublié</button>
+
+            <hr style="border: 0; border-top: 1px solid #eee; margin: 15px 0;" />
+            <button id="btn-guest" type="button" class="btn-guest" title="Utiliser l'app en mode hors-ligne sans connexion">📱 Utiliser sans connexion (Mode invité)</button>
+
+            <!-- Zone de retour dynamique avec attributs d'accessibilité -->
+            <div id="auth-message" class="auth-message" aria-live="polite" aria-atomic="true" style="margin-top: 10px; font-weight: bold;"></div>
         </div>
+    </main>
 
-        <div class="auth-actions" style="margin-top: 15px; display: flex; flex-direction: column; gap: 10px;">
-            <button id="btn-principal" type="button">Se connecter</button>
-            <button id="btn-basculer" type="button" class="btn-secondaire">Pas de compte ? S'inscrire</button>
-        </div>
-
-        <hr style="border: 0; border-top: 1px solid #eee; margin: 15px 0;" />
-        <button id="btn-reset" type="button" class="btn-secondaire">Mot de passe oublié</button>
-
-        <hr style="border: 0; border-top: 1px solid #eee; margin: 15px 0;" />
-        <button id="btn-guest" type="button" class="btn-guest" title="Utiliser l'app en mode hors-ligne sans connexion">📱 Utiliser sans connexion (Mode invité)</button>
-
-        <div id="auth-message" class="auth-message" style="margin-top: 10px; font-weight: bold;"></div>
-    </div>
+    <!-- Enregistrement du Service Worker pour la PWA -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js')
+                    .then(reg => console.log('✅ Service Worker prêt (page d\'authentification)'))
+                    .catch(err => console.warn('⚠️ Échec Service Worker:', err));
+            });
+        }
+    </script>
 
     <!-- SDK Supabase -->
     <script src="https://unpkg.com/@supabase/supabase-js@2" defer></script>

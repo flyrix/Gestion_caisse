@@ -7,7 +7,16 @@ let filtreActif = 'tous'; // 'tous', 'encours', 'soldes'
 let isGuestMode = false;  // Variable globale pour isGuest
 let guestId = null;       // ID guest pour la synchronisation
 
-// 2. Sélection des éléments du DOM
+// 2. Enregistrement du Service Worker (sw.js)
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js')
+            .then(reg => console.log('✅ Service Worker (sw.js) enregistré avec succès:', reg.scope))
+            .catch(err => console.warn('⚠️ Échec d\'enregistrement du Service Worker:', err));
+    });
+}
+
+// 3. Sélection des éléments du DOM
 const btnVocal = document.querySelector('#btn-vocal-main');
 const statusText = document.querySelector('#mic-status');
 const transcriptText = document.querySelector('#transcript-text');
@@ -48,6 +57,7 @@ const parler = (texte) => {
  */
 async function syncGuestDataToSupabase(supabaseUserId) {
     if (!isGuestMode && !localStorage.getItem('guest_id')) return;
+    if (!navigator.onLine) return;
     
     try {
         console.log(`🔄 Sync: Transfert des données invité vers Supabase (User ID: ${supabaseUserId})`);
@@ -95,7 +105,7 @@ async function syncGuestDataToSupabase(supabaseUserId) {
  * Vérifier la session et recharger les données si nécessaire
  */
 async function verifySessionAndReload() {
-    if (isGuestMode) return;
+    if (isGuestMode || !navigator.onLine) return;
     
     try {
         if (typeof SupabaseDB !== 'undefined' && typeof SupabaseDB.getSession === 'function') {
@@ -115,6 +125,9 @@ window.addEventListener('online', async () => {
     console.log('✅ Connexion réseau rétablie');
     if (!isGuestMode) {
         await verifySessionAndReload();
+        if (currentUser && currentUser.id) {
+            await syncGuestDataToSupabase(currentUser.id);
+        }
     }
 });
 
@@ -133,7 +146,7 @@ window.addEventListener('load', async () => {
         }
 
         // Vérifier si nous sommes en Mode Invité
-        isGuestMode = Auth.isGuestMode && Auth.isGuestMode();
+        isGuestMode = typeof Auth !== 'undefined' && Auth.isGuestMode && Auth.isGuestMode();
         
         if (!isGuestMode) {
             // Mode Normal (Supabase)
@@ -172,7 +185,7 @@ window.addEventListener('load', async () => {
 
         } else {
             // Mode Invité
-            const guestSession = Auth.getGuestSession && Auth.getGuestSession();
+            const guestSession = typeof Auth !== 'undefined' && Auth.getGuestSession && Auth.getGuestSession();
             if (!guestSession) {
                 window.location.href = './index.html';
                 return;
@@ -204,7 +217,8 @@ window.addEventListener('load', async () => {
                     window.location.href = './index.html';
                 } else {
                     try {
-                        await Auth.signOut();
+                        if (typeof Auth !== 'undefined') await Auth.signOut();
+                        else window.location.href = './index.html';
                     } catch (e) {
                         console.warn('Erreur lors de la déconnexion:', e);
                         window.location.href = './index.html';
@@ -395,7 +409,7 @@ async function automatiserReglementVocal(nom, somme, type) {
         opExistante.paye = true;
         
         if (window.DB) await DB.update(opExistante).catch(e => console.warn(e));
-        if (!isGuestMode && currentUser && typeof SupabaseDB !== 'undefined') {
+        if (!isGuestMode && currentUser && typeof SupabaseDB !== 'undefined' && navigator.onLine) {
             SupabaseDB.updateOperation(opExistante, currentUser.id).catch(e => console.warn(e));
         }
 
@@ -427,7 +441,7 @@ async function enregistrerOperationVocal(nom, somme, type, estPaye = false) {
     try {
         if (window.DB) await DB.addOperation(nouvelleOperation);
         
-        if (!isGuestMode && currentUser && typeof SupabaseDB !== 'undefined') {
+        if (!isGuestMode && currentUser && typeof SupabaseDB !== 'undefined' && navigator.onLine) {
             SupabaseDB.saveOperation(nouvelleOperation, currentUser.id).catch(err => console.warn(err));
         }
 
@@ -479,7 +493,7 @@ async function reglerOperation(id, type) {
     operation.paye = !operation.paye;
     
     if (window.DB) await DB.update(operation).catch(e => console.warn(e));
-    if (!isGuestMode && currentUser && typeof SupabaseDB !== 'undefined') {
+    if (!isGuestMode && currentUser && typeof SupabaseDB !== 'undefined' && navigator.onLine) {
         SupabaseDB.updateOperation(operation, currentUser.id).catch(e => console.warn(e));
     }
 
@@ -502,7 +516,7 @@ async function supprimerOperation(id, type) {
     else monnaies = monnaies.filter(e => e.id !== id);
 
     if (window.DB) await DB.remove(id).catch(e => console.warn(e));
-    if (!isGuestMode && currentUser && typeof SupabaseDB !== 'undefined') {
+    if (!isGuestMode && currentUser && typeof SupabaseDB !== 'undefined' && navigator.onLine) {
         SupabaseDB.deleteOperation(id, currentUser.id).catch(e => console.warn(e));
     }
 
@@ -658,7 +672,7 @@ if (btnEffacerRegles) {
         monnaies = monnaies.filter(o => !o.paye);
 
         if (window.DB) await DB.removeMany(ids).catch(e => console.warn(e));
-        if (!isGuestMode && currentUser && typeof SupabaseDB !== 'undefined') {
+        if (!isGuestMode && currentUser && typeof SupabaseDB !== 'undefined' && navigator.onLine) {
             SupabaseDB.deleteOperations(ids, currentUser.id).catch(e => console.warn(e));
         }
 

@@ -1,10 +1,14 @@
 /**
  * MODULE AUTHENTIFICATION (Utilise le contrôleur SupabaseDB)
+ * Inclut la gestion du mode Hors-Ligne et la synchronisation des données Invité.
  */
 const Auth = (function() {
   
   // Fonction interne pour récupérer l'instance active du client Supabase
   function getAuthClient() {
+    if (!navigator.onLine) {
+      return null; // Force null si totalement hors-ligne
+    }
     if (typeof SupabaseDB !== 'undefined' && SupabaseDB.client) {
       return SupabaseDB.client;
     }
@@ -19,10 +23,43 @@ const Auth = (function() {
     return null;
   }
 
+  // Synchronise les données locales saisies en Mode Invité vers le compte connecté
+  async function syncGuestDataToAccount(userId) {
+    if (!navigator.onLine) return;
+    
+    try {
+      // Vérifier si IndexedDB ou la base locale (DB / DBLocal) possède des opérations d'invité
+      if (typeof DB !== 'undefined' && typeof DB.getOperations === 'function') {
+        const localOps = await DB.getOperations();
+        
+        // CORRECTION 1 : Remplacement de un-syncedOps par unSyncedOps
+        const unSyncedOps = localOps.filter(op => !op.user_id || op.user_id.startsWith('guest_'));
+
+        if (unSyncedOps.length > 0) {
+          console.log(`[Sync] Synchronisation de ${unSyncedOps.length} opération(s) invité vers le compte...`);
+          
+          for (const op of unSyncedOps) {
+            delete op.id; // Laisse Supabase générer de nouveaux IDs
+            op.user_id = userId;
+            if (typeof SupabaseDB !== 'undefined' && typeof SupabaseDB.saveOperation === 'function') {
+              await SupabaseDB.saveOperation(op);
+            }
+          }
+          console.log("[Sync] Migration des données locales réussie !");
+        }
+      }
+    } catch (err) {
+      console.warn("Erreur lors de la synchronisation des données invité :", err.message);
+    }
+  }
+
   // Inscription d'un nouvel utilisateur
   async function signUp(email, password, username) {
+    if (!navigator.onLine) {
+      throw new Error("Impossible de créer un compte sans connexion internet.");
+    }
     const client = getAuthClient();
-    if (!client) throw new Error("Le client Supabase n'est pas initialisé ou vous êtes hors-ligne.");
+    if (!client) throw new Error("Le service d'authentification n'est pas joignable.");
 
     const { data, error } = await client.auth.signUp({
       email,
@@ -40,8 +77,12 @@ const Auth = (function() {
 
   // Connexion de l'utilisateur (gère l'E-mail ou le Pseudo)
   async function signIn(identifier, password) {
+    if (!navigator.onLine) {
+      throw new Error("Connexion impossible sans réseau. Utilisez le 'Mode invité' hors-ligne.");
+    }
+    
     const client = getAuthClient();
-    if (!client) throw new Error("Le client Supabase n'est pas disponible. Vérifiez votre connexion.");
+    if (!client) throw new Error("Le client Supabase n'est pas disponible.");
 
     let email = identifier;
     if (!identifier.includes('@')) {
@@ -50,7 +91,15 @@ const Auth = (function() {
         return { data: { session: null }, error: { message: "Nom d'utilisateur introuvable." } };
       }
     }
-    return await client.auth.signInWithPassword({ email, password });
+    
+    const res = await client.auth.signInWithPassword({ email, password });
+    
+    // Si la connexion réussit et que l'utilisateur était en mode invité, synchroniser
+    if (res.data && res.data.session && isGuestMode()) {
+      await syncGuestDataToAccount(res.data.session.user.id);
+    }
+
+    return res;
   }
 
   // Déconnexion de la session actuelle (Supabase ou Mode Invité)
@@ -69,6 +118,10 @@ const Auth = (function() {
       const res = await client.auth.signOut();
       window.location.href = './index.html';
       return res;
+    } else {
+      // Fallback si hors-ligne lors du logout
+      window.location.href = './index.html';
+      return { error: null };
     }
   }
 
@@ -100,9 +153,14 @@ const Auth = (function() {
 
   // Récupération sécurisée de la session active (Supabase ou Invité)
   async function getSession() {
-    // 1. Vérifier si un mode invité est actif
+    // 1. Priorité au mode invité si activé
     if (isGuestMode()) {
       return getGuestSession();
+    }
+
+    // Si totalement hors-ligne et pas en mode invité, retourner null
+    if (!navigator.onLine) {
+      return null;
     }
 
     // 2. Vérifier avec SupabaseDB si disponible
@@ -132,7 +190,7 @@ const Auth = (function() {
   // Protection des pages privées : redirige vers l'accueil si non connecté
   async function requireAuth() {
     const session = await getSession();
-    if (!session) {
+    if (!session && !isGuestMode()) {
       window.location.href = './index.html';
       return null;
     }
@@ -158,7 +216,7 @@ const Auth = (function() {
     try {
       let guestId = localStorage.getItem('guest_id');
       if (!guestId) {
-        guestId = 'guest_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        guestId = 'guest_' + Date.now() + '_' + Math.random().toString(36).substring(2, 11);
         localStorage.setItem('guest_id', guestId);
       }
       
@@ -211,8 +269,9 @@ const Auth = (function() {
  * GESTION DYNAMIQUE DE L'INTERFACE GRAPHIQUE (DOM)
  * S'exécute uniquement si nous sommes sur la page index.html (page d'authentification)
  */
-if (document.body.contains(document.querySelector('#btn-principal'))) {
-  window.addEventListener('load', async () => {
+// CORRECTION 2 : Vérification directe de l'élément pour éviter les erreurs null dans le DOM
+if (document.querySelector('#btn-principal')) {
+  window.addEventListener('DOMContentLoaded', async () => {
     // Si l'utilisateur a déjà un jeton de session valide ou est invité, on l'envoie sur le carnet
     await Auth.redirectIfAuthenticated();
 
@@ -237,9 +296,14 @@ if (document.body.contains(document.querySelector('#btn-principal'))) {
     const showMessage = (text, isError = false) => {
       if (messageBox) {
         messageBox.textContent = text;
-        messageBox.style.color = isError ? '#c0392b' : '#1f8f55';
+        messageBox.style.color = isError ? '#ef4444' : '#10b981';
       }
     };
+
+    // Alerte automatique si l'utilisateur ouvre la page hors-ligne
+    if (!navigator.onLine) {
+      showMessage("📱 Vous êtes hors-ligne. Utilisez le 'Mode invité' ci-dessous pour accéder à vos données locales.", false);
+    }
 
     // Fonction pour basculer visuellement l'interface entre Connexion et Inscription
     const basculerMode = () => {
@@ -282,6 +346,12 @@ if (document.body.contains(document.querySelector('#btn-principal'))) {
             showMessage('Veuillez renseigner votre identifiant et votre mot de passe.', true);
             return;
           }
+
+          if (!navigator.onLine) {
+            showMessage("Impossible de se connecter sans réseau. Cliquez sur 'Utiliser sans connexion'.", true);
+            return;
+          }
+
           showMessage('Connexion en cours...');
           
           try {
@@ -291,12 +361,11 @@ if (document.body.contains(document.querySelector('#btn-principal'))) {
               return;
             }
             if (data && data.session) {
-              // ✅ Nettoyage explicite des flags du Mode Invité lors de la connexion
-              if (localStorage.getItem('is_guest_mode') === 'true') {
-                localStorage.removeItem('is_guest_mode');
-                localStorage.removeItem('guest_id');
-                sessionStorage.removeItem('guest_session');
-              }
+              // Nettoyage des flags du Mode Invité lors de la connexion réussie
+              localStorage.removeItem('is_guest_mode');
+              localStorage.removeItem('guest_id');
+              sessionStorage.removeItem('guest_session');
+
               window.location.href = './page.html';
             } else {
               showMessage('Session introuvable. Vérifiez vos identifiants.', true);
@@ -316,6 +385,11 @@ if (document.body.contains(document.querySelector('#btn-principal'))) {
             showMessage('Veuillez entrer une adresse email valide contenant un "@".', true);
             return;
           }
+
+          if (!navigator.onLine) {
+            showMessage("Impossible de créer un compte hors-ligne.", true);
+            return;
+          }
           
           showMessage('Création du compte en cours...');
           
@@ -327,8 +401,6 @@ if (document.body.contains(document.querySelector('#btn-principal'))) {
             }
             
             showMessage('Compte créé avec succès ! Vérifiez votre boîte mail pour confirmer l’inscription.');
-            
-            // On repasse automatiquement l'interface en mode connexion après 3 secondes
             setTimeout(basculerMode, 3000);
           } catch (err) {
             showMessage(err.message, true);
@@ -340,6 +412,11 @@ if (document.body.contains(document.querySelector('#btn-principal'))) {
     // --- TRAITEMENT DU MOT DE PASSE OUBLIÉ ---
     if (btnReset) {
       btnReset.addEventListener('click', async () => {
+        if (!navigator.onLine) {
+          showMessage("Action impossible en mode hors-ligne.", true);
+          return;
+        }
+
         const identifier = inputIdentifier ? inputIdentifier.value.trim() : '';
         if (!identifier || !identifier.includes('@')) {
           showMessage('Veuillez entrer votre adresse email dans le champ du haut pour réinitialiser le mot de passe.', true);

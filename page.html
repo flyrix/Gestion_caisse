@@ -2,15 +2,15 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="stylesheet" href="styles/style.css?v=1.0.5" />
-    <link rel="icon" href="icons/icon-192.png" />
-    <link rel="manifest" href="manifest.json" />
-    <meta name="theme-color" content="#3498db" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="styles/style.css?v=1.0.5">
+    <link rel="icon" href="icons/icon-192.png">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#3498db">
     <title>Caisse Vocale Intelligente avec Avatar Robot</title>
 
-    <!-- Bibliothèque Lottie pour l'animation Web GL / JSON de l'avatar -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/bodymovin/5.12.2/lottie.min.js"></script>
+    <!-- Bibliothèque Lottie pour l'animation WebGL / JSON de l'avatar -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bodymovin/5.12.2/lottie.min.js" defer></script>
 </head>
 <body>
     <header>
@@ -33,31 +33,31 @@
         <div id="avatar-container" class="avatar-animation" title="Votre assistant virtuel"></div>
 
         <!-- Bouton Micro principal synchronisé avec le Robot -->
-        <button id="btn-vocal-main" class="mic-button" aria-label="Activer le microphone">
+        <button id="btn-vocal-main" class="mic-button" type="button" aria-label="Activer le microphone">
             <span class="mic-icon">🎙️</span>
             <span id="mic-status">Appuyez pour répondre</span>
         </button>
 
-        <div id="live-feedback" class="feedback-box">
+        <div id="live-feedback" class="feedback-box" aria-live="polite">
             <p id="transcript-text">Exemple : <em>"Junior a réglé 2000 francs"</em> ou <em>"J'ai rendu 500 francs à Aka"</em></p>
             <p id="ai-response" class="ai-status"></p>
         </div>
     </main>
 
-    <hr />
+    <hr>
 
     <!-- Actions globales & Automatisation -->
-    <div class="zone-audio-globale">
-        <button id="btn-lire-tout">🔊 Résumé vocal des comptes</button>
-        <button id="btn-effacer-regles" class="btn-secondary">Nettoyer l'historique des réglés</button>
-    </div>
+    <nav class="zone-audio-globale" aria-label="Actions vocales et nettoyage">
+        <button id="btn-lire-tout" type="button">🔊 Résumé vocal des comptes</button>
+        <button id="btn-effacer-regles" type="button" class="btn-secondary">Nettoyer l'historique des réglés</button>
+    </nav>
 
     <!-- Filtres d'affichage pour la gestion automatique des règlements -->
-    <div class="filter-bar">
-        <button id="filter-all" class="filter-btn active" onclick="filtrerComptes('tous')">Tous</button>
-        <button id="filter-pending" class="filter-btn" onclick="filtrerComptes('encours')">En cours</button>
-        <button id="filter-settled" class="filter-btn" onclick="filtrerComptes('soldes')">✅ Soldés / Réglés</button>
-    </div>
+    <nav class="filter-bar" aria-label="Filtres d'affichage des comptes">
+        <button id="filter-all" class="filter-btn active" type="button" onclick="filtrerComptes('tous')">Tous</button>
+        <button id="filter-pending" class="filter-btn" type="button" onclick="filtrerComptes('encours')">En cours</button>
+        <button id="filter-settled" class="filter-btn" type="button" onclick="filtrerComptes('soldes')">✅ Soldés / Réglés</button>
+    </nav>
 
     <!-- Résumé financier -->
     <section id="resume" aria-label="Résumé du carnet">
@@ -88,16 +88,27 @@
         </section>
     </div>
 
+    <!-- Enregistrement du Service Worker pour le support PWA Hors-ligne -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js')
+                    .then(reg => console.log('✅ Service Worker prêt (page principale)'))
+                    .catch(err => console.warn('⚠️ Échec Service Worker:', err));
+            });
+        }
+    </script>
+
     <!-- SDK Supabase & Logiciels applicatifs -->
-    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
-    <script src="scripts/supabase-config.js"></script>
-    <script src="scripts/supabase.js"></script>
-    <script src="scripts/db.js"></script>
-    <script src="scripts/auth.js"></script>
+    <script src="https://unpkg.com/@supabase/supabase-js@2" defer></script>
+    <script src="scripts/supabase-config.js" defer></script>
+    <script src="scripts/supabase.js" defer></script>
+    <script src="scripts/db.js" defer></script>
+    <script src="scripts/auth.js" defer></script>
     
     <!-- Script de l'Avatar Visèmes (Lip-Sync 2D, Text-To-Speech & Accueil automatique) -->
-    <script src="scripts/avatar-visemes.js?v=1.0.0"></script>
-    <script src="scripts/ai-vocal.js?v=1.0.1"></script>
-    <script src="scripts/script.js?v=1.0.3"></script>
+    <script src="scripts/avatar-visemes.js?v=1.0.0" defer></script>
+    <script src="scripts/ai-vocal.js?v=1.0.1" defer></script>
+    <script src="scripts/script.js?v=1.0.3" defer></script>
 </body>
 </html>
