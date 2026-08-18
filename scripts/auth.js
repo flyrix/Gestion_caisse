@@ -5,7 +5,6 @@
 const Auth = (function() {
 
   function getAuthClient() {
-    if (!navigator.onLine) return null;
     if (typeof SupabaseDB !== 'undefined' && SupabaseDB.client) {
       return SupabaseDB.client;
     }
@@ -70,11 +69,10 @@ const Auth = (function() {
           for (const op of unSyncedOps) {
             const oldLocalId = op.id;
             const payload = { ...op, user_id: userId };
-            delete payload.id;
 
             let savedRecord = null;
             if (typeof SupabaseDB !== 'undefined' && typeof SupabaseDB.saveOperation === 'function') {
-              savedRecord = await SupabaseDB.saveOperation(payload);
+              savedRecord = await SupabaseDB.saveOperation(payload, userId);
             }
 
             if (typeof DB.deleteOperation === 'function' && oldLocalId) {
@@ -104,8 +102,15 @@ const Auth = (function() {
       password,
       options: { data: { username } }
     });
-    if (!error && data.user) {
-      await SupabaseDB.createProfile(data.user.id, username, email);
+    
+    if (error) throw error;
+
+    if (data && data.user) {
+      if (typeof SupabaseDB !== 'undefined' && typeof SupabaseDB.createProfile === 'function') {
+        await SupabaseDB.createProfile(data.user.id, username, email);
+      }
+      clearGuestState();
+      localStorage.removeItem('guest_id');
     }
     return { data, error };
   }
@@ -117,7 +122,9 @@ const Auth = (function() {
 
     let email = identifier;
     if (!identifier.includes('@')) {
-      email = await SupabaseDB.getEmailByUsername(identifier);
+      if (typeof SupabaseDB !== 'undefined' && typeof SupabaseDB.getEmailByUsername === 'function') {
+        email = await SupabaseDB.getEmailByUsername(identifier);
+      }
       if (!email) return { data: { session: null }, error: { message: "Nom d'utilisateur introuvable." } };
     }
 
@@ -135,51 +142,47 @@ const Auth = (function() {
     localStorage.removeItem('guest_id');
 
     const client = getAuthClient();
-    if (client) await client.auth.signOut();
+    if (client) {
+      try { await client.auth.signOut(); } catch (e) {}
+    }
 
     window.location.href = './index.html';
     return { error: null };
   }
 
   async function getSession() {
+    if (isGuestMode()) {
+      return getGuestSession();
+    }
+
     if (navigator.onLine) {
       const client = getAuthClient();
       if (client) {
         try {
           const { data, error } = await client.auth.getSession();
           if (!error && data && data.session) {
-            clearGuestState();
             return data.session;
           }
         } catch (e) {
-          console.warn("[Auth] Erreur session Supabase.");
+          console.warn("[Auth] Erreur lors de la récupération de la session Supabase.");
         }
       }
     }
 
-    if (!navigator.onLine || isGuestMode()) {
-      return getGuestSession();
-    }
-
-    return null;
+    // Si pas de réseau et pas en mode invité explicite, retourner la session locale invitée
+    return getGuestSession();
   }
 
   async function requireAuth() {
     let session = await getSession();
-    if (!session && !navigator.onLine) {
+    if (!session) {
       session = await enterGuestMode();
-      return session;
-    }
-    if (!session && !isGuestMode()) {
-      window.location.href = './index.html';
-      return null;
     }
     return session;
   }
 
   async function redirectIfAuthenticated() {
-    // Ne rediriger automatiquement QUE si un utilisateur est RÉELLEMENT connecté à Supabase avec un compte
-    if (navigator.onLine) {
+    if (navigator.onLine && !isGuestMode()) {
       const client = getAuthClient();
       if (client) {
         try {
@@ -211,15 +214,14 @@ const Auth = (function() {
 })();
 
 /**
- * INITIALISATION DE L'INTERFACE UTILISATEUR (GESTION DES CLICS)
+ * INITIALISATION DE L'INTERFACE UTILISATEUR
  */
 document.addEventListener('DOMContentLoaded', async () => {
   const isLoginPage = !!document.getElementById('auth-form');
-  const isMainPage = !!document.getElementById('btn-vocal-main');
+  const isMainPage = !!document.getElementById('btn-vocal-main') || !!document.getElementById('auth-bar');
 
-  // 1. Sur index.html (Page de connexion)
+  // 1. SUR INDEX.HTML (Page de connexion)
   if (isLoginPage) {
-    // Vérifier si déjà authentifié
     await Auth.redirectIfAuthenticated();
 
     const authForm = document.getElementById('auth-form');
@@ -234,23 +236,22 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     let isSignUpMode = false;
 
-    // A. Bouton de Bascule Connexion <-> Inscription
     if (btnBasculer) {
       btnBasculer.addEventListener('click', () => {
         isSignUpMode = !isSignUpMode;
         if (authMessage) authMessage.textContent = '';
 
         if (isSignUpMode) {
-          authTitle.textContent = "Inscription";
-          authDesc.textContent = "Créez votre compte pour sauvegarder votre carnet de caisse.";
-          btnPrincipal.textContent = "S'inscrire";
+          if (authTitle) authTitle.textContent = "Inscription";
+          if (authDesc) authDesc.textContent = "Créez votre compte pour sauvegarder votre carnet de caisse.";
+          if (btnPrincipal) btnPrincipal.textContent = "S'inscrire";
           btnBasculer.textContent = "Déjà un compte ? Se connecter";
           if (signupGroup) signupGroup.hidden = false;
           if (signupUsernameInput) signupUsernameInput.required = true;
         } else {
-          authTitle.textContent = "Connexion";
-          authDesc.textContent = "Connectez-vous pour accéder à votre carnet de caisse et synchroniser vos opérations.";
-          btnPrincipal.textContent = "Se connecter";
+          if (authTitle) authTitle.textContent = "Connexion";
+          if (authDesc) authDesc.textContent = "Connectez-vous pour accéder à votre carnet de caisse et synchroniser vos opérations.";
+          if (btnPrincipal) btnPrincipal.textContent = "Se connecter";
           btnBasculer.textContent = "Pas de compte ? S'inscrire";
           if (signupGroup) signupGroup.hidden = true;
           if (signupUsernameInput) signupUsernameInput.required = false;
@@ -258,7 +259,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       });
     }
 
-    // B. Bouton Mode Invité (Sans connexion)
     if (btnGuest) {
       btnGuest.addEventListener('click', async () => {
         if (authMessage) {
@@ -270,7 +270,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       });
     }
 
-    // C. Soumission du Formulaire (Connexion ou Inscription)
     if (authForm) {
       authForm.addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -294,7 +293,7 @@ document.addEventListener('DOMContentLoaded', async () => {
               authMessage.style.color = '#27ae60';
               authMessage.textContent = "Compte créé avec succès ! Redirection...";
             }
-            setTimeout(() => window.location.href = './page.html', 1500);
+            setTimeout(() => window.location.href = './page.html', 1000);
 
           } else {
             const { error } = await Auth.signIn(identifier, password);
@@ -304,7 +303,7 @@ document.addEventListener('DOMContentLoaded', async () => {
               authMessage.style.color = '#27ae60';
               authMessage.textContent = "Connexion réussie ! Redirection...";
             }
-            setTimeout(() => window.location.href = './page.html', 1000);
+            setTimeout(() => window.location.href = './page.html', 800);
           }
         } catch (err) {
           if (authMessage) {
@@ -316,11 +315,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
-  // 2. Sur page.html (Page principale de l'application)
+  // 2. SUR PAGE.HTML (Page principale de l'application)
   if (isMainPage) {
     const session = await Auth.requireAuth();
     
-    // Affichage de l'adresse ou du profil connecté
     const authBar = document.getElementById('auth-bar');
     const userEmailSpan = document.getElementById('user-email');
     const btnDeconnexion = document.getElementById('btn-deconnexion');
@@ -341,35 +339,21 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 /**
- * ÉCOUTEURS D'ÉVÉNEMENTS RÉSEAU AUTOMATIQUES
+ * GESTION ÉVÉNEMENTS RÉSEAU
  */
-window.addEventListener('offline', async () => {
-  console.warn("📱 [Réseau] Connexion perdue. Bascule automatique en mode hors-ligne.");
-  await Auth.enterGuestMode();
-});
-
 window.addEventListener('online', async () => {
-  console.log("🌐 [Réseau] Connexion rétablie ! Analyse de la session...");
-
-  Auth.clearGuestState();
-
-  const client = Auth.getAuthClient();
-  if (client) {
-    try {
-      const { data } = await client.auth.getSession();
-
-      if (data && data.session && data.session.user) {
-        const userId = data.session.user.id;
-        console.log(`✅ [Réseau] Session retrouvée pour : ${data.session.user.email}`);
-
-        await Auth.syncGuestDataToAccount(userId);
-        window.location.reload();
-        return;
+  console.log("🌐 [Réseau] Connexion rétablie.");
+  if (!Auth.isGuestMode()) {
+    const client = Auth.getAuthClient();
+    if (client) {
+      try {
+        const { data } = await client.auth.getSession();
+        if (data && data.session && data.session.user) {
+          await Auth.syncGuestDataToAccount(data.session.user.id);
+        }
+      } catch (err) {
+        console.warn("[Réseau] Erreur synchronisation online:", err.message);
       }
-    } catch (err) {
-      console.warn("[Réseau] Erreur réhydratation :", err.message);
     }
   }
-
-  window.location.reload();
 });
