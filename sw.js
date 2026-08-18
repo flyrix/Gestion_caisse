@@ -3,7 +3,16 @@
  * Gestion robuste du cache hors-ligne, du SDK Supabase et des CDNs.
  */
 
-const CACHE_NAME = 'caisse-pwa-v1.0.8';
+const CACHE_NAME = 'caisse-pwa-v1.0.9';
+
+// Scripts applicatifs : toujours récupérés depuis le réseau (jamais depuis le cache)
+const NETWORK_ONLY = [
+  '/scripts/auth.js',
+  '/scripts/supabase.js',
+  '/scripts/supabase-config.js',
+  '/index.html',
+  '/'
+];
 
 // Liste des ressources à pré-cacher obligatoirement
 const STATIC_ASSETS = [
@@ -66,6 +75,12 @@ self.addEventListener('fetch', (event) => {
 
   // LAISSER PASSER : API REST et WebSockets Supabase (Gestion en direct par SupabaseDB / IndexedDB)
   if (url.protocol === 'ws:' || url.protocol === 'wss:' || url.hostname.includes('supabase.co')) {
+    return;
+  }
+
+  // NETWORK ONLY : scripts critiques toujours frais
+  if (NETWORK_ONLY.some(p => url.pathname === p || url.pathname.endsWith(p))) {
+    event.respondWith(fetch(request).catch(() => caches.match(request)));
     return;
   }
 
