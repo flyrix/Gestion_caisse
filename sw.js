@@ -3,11 +3,12 @@
  * Gestion robuste du cache hors-ligne, du SDK Supabase et des CDNs.
  */
 
-const CACHE_NAME = 'caisse-pwa-v1.0.7';
+const CACHE_NAME = 'caisse-pwa-v1.0.8';
 
 // Liste des ressources à pré-cacher obligatoirement
 const STATIC_ASSETS = [
   './',
+  './index.html',
   './page.html',
   './styles/style.css?v=1.0.5',
   './scripts/supabase-config.js',
