@@ -78,24 +78,36 @@ async function syncGuestDataToSupabase(supabaseUserId) {
         console.log(`🔄 Sync: Transfert des données invité vers Supabase (User ID: ${supabaseUserId})`);
         
         const guestOps = await getLocalOperations();
-        
         if (!guestOps || guestOps.length === 0) {
             console.log('✅ Aucune donnée invité à synchroniser.');
             return;
         }
+
+        // Filtrer uniquement les opérations temporaires invité ou non synchronisées
+        const unSyncedOps = guestOps.filter(op => !op.user_id || op.user_id.startsWith('guest_'));
         
+        if (unSyncedOps.length === 0) return;
+
         let syncedCount = 0;
-        for (const op of guestOps) {
+        for (const op of unSyncedOps) {
+            const oldLocalId = op.id;
             const transferOp = {
                 ...op,
                 user_id: supabaseUserId,
-                synced: true,
-                syncedAt: new Date().toISOString()
+                createdat: op.createdat || op.createdAt || new Date().toISOString()
             };
             
             try {
                 if (typeof SupabaseDB !== 'undefined' && typeof SupabaseDB.saveOperation === 'function') {
-                    await SupabaseDB.saveOperation(transferOp, supabaseUserId);
+                    const savedRecord = await SupabaseDB.saveOperation(transferOp, supabaseUserId);
+                    
+                    // Mise à jour de la référence en local
+                    if (window.DB && typeof DB.deleteOperation === 'function' && oldLocalId) {
+                        await DB.deleteOperation(oldLocalId);
+                    }
+                    if (window.DB && typeof DB.saveOperation === 'function') {
+                        await DB.saveOperation(savedRecord || transferOp);
+                    }
                     syncedCount++;
                 }
             } catch (e) {
@@ -173,7 +185,6 @@ window.addEventListener('load', async () => {
             }
 
             if (!session) {
-                // Tentative de récupération locale avant redirection
                 const localOps = await getLocalOperations();
                 if (localOps && localOps.length > 0) {
                     console.warn('Session expirée mais données locales détectées.');
@@ -419,7 +430,6 @@ async function automatiserReglementVocal(nom, somme, type) {
         parler(msg);
         afficherListes();
     } else {
-        // Enregistrer directement comme réglé si l'opération n'existait pas
         await enregistrerOperationVocal(nom, somme, type, true);
     }
 }
@@ -431,6 +441,7 @@ async function enregistrerOperationVocal(nom, somme, type, estPaye = false) {
     const maintenant = new Date().toISOString();
     const nouvelleOperation = {
         id: Date.now(), 
+        user_id: currentUser ? currentUser.id : (guestId || 'guest_local'),
         client: nom, 
         montant: somme,
         paye: estPaye,
@@ -446,7 +457,10 @@ async function enregistrerOperationVocal(nom, somme, type, estPaye = false) {
         }
         
         if (!isGuestMode && currentUser && typeof SupabaseDB !== 'undefined' && navigator.onLine) {
-            SupabaseDB.saveOperation(nouvelleOperation, currentUser.id).catch(err => console.warn(err));
+            const remoteOp = await SupabaseDB.saveOperation(nouvelleOperation, currentUser.id).catch(err => console.warn(err));
+            if (remoteOp && remoteOp.id) {
+                nouvelleOperation.id = remoteOp.id;
+            }
         }
 
         let msg = "";
