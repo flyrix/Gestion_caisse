@@ -3,7 +3,7 @@
  * Gestion robuste du cache hors-ligne, du SDK Supabase et des CDNs.
  */
 
-const CACHE_NAME = 'caisse-pwa-v1.0.9';
+const CACHE_NAME = 'caisse-pwa-v1.1.0';
 
 // Scripts applicatifs : toujours récupérés depuis le réseau (jamais depuis le cache)
 const NETWORK_ONLY = [
@@ -129,8 +129,13 @@ self.addEventListener('fetch', (event) => {
 
         // 3. Pour la navigation HTML
         if (request.mode === 'navigate') {
-          const pageCache = await caches.match('./page.html') || await caches.match('./') || await caches.match('./index.html');
-          if (pageCache) return pageCache;
+          const candidates = [request.url, './page.html', './index.html', './', '/page.html', '/index.html', '/'];
+          for (const c of candidates) {
+            const hit = await caches.match(c, { ignoreSearch: true });
+            if (hit) return hit;
+          }
+          // Dernier recours : réponse vide valide
+          return new Response('<html><body>Hors-ligne</body></html>', { status: 200, headers: { 'Content-Type': 'text/html' } });
         }
 
         // 4. Fallback par défaut pour toutes les autres ressources
