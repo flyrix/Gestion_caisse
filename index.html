@@ -58,30 +58,11 @@
         }
     </script>
 
-    <!-- SDK Supabase (UMD) - chargé en async, les scripts app attendent sa disponibilité -->
-    <script>
-      (function() {
-        var s = document.createElement('script');
-        s.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.48.1/dist/umd/supabase.js';
-        s.integrity = 'sha384-Tgoms7a53eyQOCcKXlBrA1X967mm3BHK43f3979dACl74tZlLW+O85pmfCuhfUtx';
-        s.crossOrigin = 'anonymous';
-        s.onload = loadAppScripts;
-        s.onerror = loadAppScripts; // charge quand même les scripts app si CDN échoue
-        document.head.appendChild(s);
-
-        function loadAppScripts() {
-          var scripts = ['scripts/supabase-config.js', 'scripts/supabase.js', 'scripts/auth.js'];
-          function loadNext(i) {
-            if (i >= scripts.length) return;
-            var a = document.createElement('script');
-            a.src = scripts[i];
-            a.onload = function() { loadNext(i + 1); };
-            a.onerror = function() { loadNext(i + 1); };
-            document.head.appendChild(a);
-          }
-          loadNext(0);
-        }
-      })();
-    </script>
+    <!-- SDK Supabase (UMD) -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.48.1/dist/umd/supabase.js"></script>
+    <!-- Scripts applicatifs -->
+    <script src="scripts/supabase-config.js"></script>
+    <script src="scripts/supabase.js"></script>
+    <script src="scripts/auth.js"></script>
 </body>
 </html>

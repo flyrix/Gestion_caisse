@@ -216,7 +216,7 @@ const Auth = (function() {
 /**
  * INITIALISATION DE L'INTERFACE UTILISATEUR
  */
-async function initAuthUI() {
+document.addEventListener('DOMContentLoaded', async () => {
   const isLoginPage = !!document.getElementById('auth-form');
   const isMainPage = !!document.getElementById('btn-vocal-main') || !!document.getElementById('auth-bar');
 
@@ -379,14 +379,7 @@ async function initAuthUI() {
       });
     }
   }
-}
-
-// Fonctionne que le DOM soit déjà prêt ou non (chargement dynamique)
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initAuthUI);
-} else {
-  initAuthUI();
-}
+});
 
 /**
  * GESTION ÉVÉNEMENTS RÉSEAU
