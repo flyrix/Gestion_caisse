@@ -40,26 +40,18 @@
             <button id="btn-reset" type="button" class="btn-secondaire">Mot de passe oublié</button>
 
             <hr style="border: 0; border-top: 1px solid #eee; margin: 15px 0;" />
-            <button id="btn-guest" type="button" class="btn-guest" title="Utiliser l'app en mode hors-ligne sans connexion">📱 Utiliser sans connexion (Mode invité)</button>
+            <button id="btn-guest" type="button" class="btn-guest" hidden>📱 Utiliser sans connexion (Mode invité)</button>
 
             <!-- Zone de retour dynamique -->
             <div id="auth-message" class="auth-message" aria-live="polite" aria-atomic="true" style="margin-top: 10px; font-weight: bold;"></div>
         </div>
     </main>
 
-    <!-- Service Worker -->
+    <!-- Service Worker désactivé (mode en ligne uniquement) -->
     <script>
         if ('serviceWorker' in navigator) {
-            // Force clear old SW and caches, then re-register fresh
-            navigator.serviceWorker.getRegistrations().then(regs => {
-                regs.forEach(r => r.unregister());
-            });
+            navigator.serviceWorker.getRegistrations().then(regs => regs.forEach(r => r.unregister()));
             caches.keys().then(keys => keys.forEach(k => caches.delete(k)));
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js')
-                    .then(reg => console.log('✅ Service Worker prêt (page d\'authentification)'))
-                    .catch(err => console.warn('⚠️ Échec Service Worker:', err));
-            });
         }
     </script>
 
