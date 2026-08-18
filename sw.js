@@ -3,7 +3,7 @@
  * Gestion robuste du cache hors-ligne, du SDK Supabase et des CDNs.
  */
 
-const CACHE_NAME = 'caisse-pwa-v1.0.6';
+const CACHE_NAME = 'caisse-pwa-v1.0.7';
 
 // Liste des ressources à pré-cacher obligatoirement
 const STATIC_ASSETS = [
@@ -16,9 +16,8 @@ const STATIC_ASSETS = [
   './scripts/auth.js',
   './scripts/avatar-visemes.js?v=1.0.0',
   './scripts/script.js?v=1.0.3',
-  './scripts/ai-vocal.js?v=1.0.1',
-  // CDNs externes indispensables (Supabase UMD et Bodymovin Lottie)
-  'https://unpkg.com/@supabase/supabase-js@2.112.3/dist/umd/supabase.js',
+  // CDNs externes indispensables (Supabase UMD CDN jsDelivr et Bodymovin Lottie)
+  'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.48.1/dist/umd/supabase.js',
   'https://cdnjs.cloudflare.com/ajax/libs/bodymovin/5.12.2/lottie.min.js'
 ];
 
@@ -94,7 +93,7 @@ self.addEventListener('fetch', (event) => {
       } catch (error) {
         console.warn(`[SW] Échec du réseau pour : ${request.url}`);
 
-        // CORRECTION MAJEURE : Garantir QU'UNE RESPONSE VALIDE est TOUJOURS renvoyée (Jamais undefined)
+        // GARANTIE RESPONSE VALIDE (Jamais undefined)
         
         // 1. Pour les scripts JS
         if (request.destination === 'script' || url.pathname.endsWith('.js')) {
@@ -114,7 +113,7 @@ self.addEventListener('fetch', (event) => {
 
         // 3. Pour la navigation HTML
         if (request.mode === 'navigate') {
-          const pageCache = await caches.match('./page.html') || await caches.match('./');
+          const pageCache = await caches.match('./page.html') || await caches.match('./') || await caches.match('./index.html');
           if (pageCache) return pageCache;
         }
 

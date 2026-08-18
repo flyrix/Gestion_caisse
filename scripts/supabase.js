@@ -8,7 +8,6 @@ const SupabaseDB = (function() {
 
   let client = null;
 
-  // Initialisation sécurisée du client Supabase
   function initClient() {
     if (client) return client;
 
@@ -17,7 +16,6 @@ const SupabaseDB = (function() {
       return null;
     }
 
-    // Vérification de la disponibilité du SDK Supabase (chargé via CDN)
     if (typeof supabase !== 'undefined' && typeof supabase.createClient === 'function') {
       try {
         client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
@@ -36,15 +34,21 @@ const SupabaseDB = (function() {
     return client;
   }
 
-  // Tentative d'initialisation au chargement du script
   initClient();
+
+  // Utilitaire interne pour transformer les payloads en format DB
+  function formatRecord(operation, userId) {
+    const record = { ...operation, user_id: userId };
+    if (record.createdAt) {
+      record.createdat = record.createdAt;
+      delete record.createdAt;
+    }
+    return record;
+  }
 
   async function init() {
     const activeClient = initClient();
-    if (!activeClient) {
-      console.warn('Initialisation Supabase ignorée : client indisponible.');
-      return;
-    }
+    if (!activeClient) return;
     try {
       await activeClient.auth.getSession();
     } catch (err) {
@@ -71,7 +75,6 @@ const SupabaseDB = (function() {
     return session?.user || null;
   }
 
-  // Permet de retrouver l'email d'un utilisateur via son pseudo (Login hybride)
   async function getEmailByUsername(username) {
     const activeClient = initClient();
     if (!username || !activeClient || !navigator.onLine) return null;
@@ -84,10 +87,7 @@ const SupabaseDB = (function() {
         .limit(1)
         .maybeSingle();
 
-      if (error) {
-        console.warn('Erreur Supabase getEmailByUsername :', error.message);
-        return null;
-      }
+      if (error) throw error;
       return data?.email || null;
     } catch (err) {
       console.warn('Erreur getEmailByUsername :', err.message);
@@ -95,20 +95,20 @@ const SupabaseDB = (function() {
     }
   }
 
-  // Crée la ligne de profil dans la table publique lors de l'inscription
   async function createProfile(userId, username, email) {
     const activeClient = initClient();
     if (!userId || !username || !email || !activeClient || !navigator.onLine) return;
 
     try {
-      const { error } = await activeClient.from('profiles').upsert({ id: userId, username, email });
+      const { error } = await activeClient
+        .from('profiles')
+        .upsert({ id: userId, username, email }, { onConflict: 'id' });
       if (error) console.warn('Erreur Supabase createProfile :', error.message);
     } catch (err) {
       console.warn('Erreur createProfile :', err.message);
     }
   }
 
-  // Rapatrie les crédits et monnaies depuis le cloud
   async function fetchOperations(userId) {
     const activeClient = initClient();
     if (!userId || !activeClient || !navigator.onLine) return [];
@@ -120,10 +120,7 @@ const SupabaseDB = (function() {
         .eq('user_id', userId)
         .order('createdat', { ascending: false });
 
-      if (error) {
-        console.warn('Erreur Supabase fetchOperations :', error.message);
-        return [];
-      }
+      if (error) throw error;
       return data || [];
     } catch (err) {
       console.warn('Erreur fetchOperations :', err.message);
@@ -131,28 +128,14 @@ const SupabaseDB = (function() {
     }
   }
 
-  // Sauvegarde une nouvelle opération
   async function saveOperation(operation, userId) {
     const activeClient = initClient();
     if (!userId || !activeClient || !navigator.onLine) return null;
 
     try {
-      // Copie propre de l'opération
-      const record = {
-        ...operation,
-        user_id: userId
-      };
-
-      if (record.createdAt) {
-        record.createdat = record.createdAt;
-        delete record.createdAt;
-      }
-
+      const record = formatRecord(operation, userId);
       const { data, error } = await activeClient.from('operations').upsert(record).select();
-      if (error) {
-        console.warn('Erreur Supabase saveOperation :', error.message);
-        return null;
-      }
+      if (error) throw error;
       return data ? data[0] : null;
     } catch (err) {
       console.warn('Erreur saveOperation :', err.message);
@@ -160,22 +143,12 @@ const SupabaseDB = (function() {
     }
   }
 
-  // Met à jour une opération (ex: marquer comme payé/barré)
   async function updateOperation(operation, userId) {
     const activeClient = initClient();
     if (!userId || !activeClient || !navigator.onLine) return;
 
     try {
-      const record = {
-        ...operation,
-        user_id: userId
-      };
-
-      if (record.createdAt) {
-        record.createdat = record.createdAt;
-        delete record.createdAt;
-      }
-
+      const record = formatRecord(operation, userId);
       const { error } = await activeClient.from('operations').upsert(record);
       if (error) console.warn('Erreur Supabase updateOperation :', error.message);
     } catch (err) {
@@ -183,7 +156,6 @@ const SupabaseDB = (function() {
     }
   }
 
-  // Supprime une seule opération
   async function deleteOperation(id, userId) {
     const activeClient = initClient();
     if (!id || !userId || !activeClient || !navigator.onLine) return;
@@ -199,7 +171,6 @@ const SupabaseDB = (function() {
     }
   }
 
-  // Nettoyage en lot des opérations réglées
   async function deleteOperations(ids, userId) {
     const activeClient = initClient();
     if (!ids?.length || !userId || !activeClient || !navigator.onLine) return;
@@ -216,16 +187,23 @@ const SupabaseDB = (function() {
     }
   }
 
-  // Écouteur Temps Réel (Websocket) pour synchroniser instantanément les lignes de caisse
   async function subscribeToOperations(userId, handler) {
     const activeClient = initClient();
     if (!userId || !activeClient || !navigator.onLine) return null;
 
     try {
-      const channel = activeClient.channel('public:operations')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'operations' }, payload => {
-          handler(payload);
-        })
+      // Filtrage ciblé par user_id pour éviter la surconsommation réseau
+      const channel = activeClient.channel(`public:operations:${userId}`)
+        .on(
+          'postgres_changes', 
+          { 
+            event: '*', 
+            schema: 'public', 
+            table: 'operations',
+            filter: `user_id=eq.${userId}`
+          }, 
+          payload => handler(payload)
+        )
         .subscribe();
 
       return channel;
@@ -235,15 +213,14 @@ const SupabaseDB = (function() {
     }
   }
 
-  // Fermeture propre du canal temps réel lors de la déconnexion
   function unsubscribeChannel(channel) {
     const activeClient = initClient();
     try {
       if (!channel) return;
-      if (typeof channel.unsubscribe === 'function') {
-        channel.unsubscribe();
-      } else if (activeClient && typeof activeClient.removeChannel === 'function') {
+      if (activeClient && typeof activeClient.removeChannel === 'function') {
         activeClient.removeChannel(channel);
+      } else if (typeof channel.unsubscribe === 'function') {
+        channel.unsubscribe();
       }
     } catch (e) {
       console.warn('Erreur unsubscribeChannel :', e.message || e);
