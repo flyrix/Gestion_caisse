@@ -224,6 +224,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (isLoginPage) {
     await Auth.redirectIfAuthenticated();
 
+    if (!navigator.onLine) {
+      const msg = document.getElementById('auth-message');
+      if (msg) {
+        msg.style.color = '#f59e0b';
+        msg.textContent = "Hors-ligne : utilisez le Mode Invité ou connectez-vous au réseau.";
+      }
+    }
+
     const authForm = document.getElementById('auth-form');
     const authTitle = document.getElementById('auth-title');
     const authDesc = document.getElementById('auth-desc');
@@ -255,6 +263,41 @@ document.addEventListener('DOMContentLoaded', async () => {
           btnBasculer.textContent = "Pas de compte ? S'inscrire";
           if (signupGroup) signupGroup.hidden = true;
           if (signupUsernameInput) signupUsernameInput.required = false;
+        }
+      });
+    }
+
+    const btnReset = document.getElementById('btn-reset');
+    if (btnReset) {
+      btnReset.addEventListener('click', async () => {
+        if (!navigator.onLine) {
+          if (authMessage) {
+            authMessage.style.color = '#e74c3c';
+            authMessage.textContent = "Connexion internet requise pour réinitialiser le mot de passe.";
+          }
+          return;
+        }
+        const identifier = document.getElementById('identifier').value.trim();
+        if (!identifier || !identifier.includes('@')) {
+          if (authMessage) {
+            authMessage.style.color = '#e74c3c';
+            authMessage.textContent = "Veuillez saisir votre adresse email ci-dessus.";
+          }
+          return;
+        }
+        const client = Auth.getAuthClient();
+        if (!client) return;
+        try {
+          const { error } = await client.auth.resetPasswordForEmail(identifier);
+          if (authMessage) {
+            authMessage.style.color = error ? '#e74c3c' : '#27ae60';
+            authMessage.textContent = error ? error.message : "Email de réinitialisation envoyé !";
+          }
+        } catch (err) {
+          if (authMessage) {
+            authMessage.style.color = '#e74c3c';
+            authMessage.textContent = err.message;
+          }
         }
       });
     }
