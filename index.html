@@ -70,11 +70,16 @@
         document.head.appendChild(s);
 
         function loadAppScripts() {
-          ['scripts/supabase-config.js', 'scripts/supabase.js', 'scripts/auth.js'].forEach(function(src) {
+          var scripts = ['scripts/supabase-config.js', 'scripts/supabase.js', 'scripts/auth.js'];
+          function loadNext(i) {
+            if (i >= scripts.length) return;
             var a = document.createElement('script');
-            a.src = src;
+            a.src = scripts[i];
+            a.onload = function() { loadNext(i + 1); };
+            a.onerror = function() { loadNext(i + 1); };
             document.head.appendChild(a);
-          });
+          }
+          loadNext(0);
         }
       })();
     </script>
