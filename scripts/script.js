@@ -716,3 +716,50 @@ if (btnEffacerRegles) {
         afficherListes();
     });
 }
+
+// ==========================================
+// FORMULAIRE DE SAISIE MANUELLE
+// ==========================================
+const btnToggleForm = document.getElementById('btn-toggle-form');
+const formManuel    = document.getElementById('form-manuel');
+const operationForm = document.getElementById('operation-form');
+const formMessage   = document.getElementById('form-message');
+
+if (btnToggleForm && formManuel) {
+    btnToggleForm.addEventListener('click', () => {
+        formManuel.hidden = !formManuel.hidden;
+        btnToggleForm.textContent = formManuel.hidden ? '✏️ Saisie manuelle' : '✖ Fermer la saisie';
+    });
+}
+
+document.getElementById('btn-annuler')?.addEventListener('click', () => {
+    formManuel.hidden = true;
+    btnToggleForm.textContent = '✏️ Saisie manuelle';
+    operationForm.reset();
+    formMessage.textContent = '';
+});
+
+if (operationForm) {
+    operationForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const client  = document.getElementById('f-client').value.trim();
+        const montant = parseInt(document.getElementById('f-montant').value, 10);
+        const type    = document.getElementById('f-type').value;
+
+        if (!client || !montant || montant < 1) {
+            formMessage.style.color = '#e74c3c';
+            formMessage.textContent = 'Veuillez remplir tous les champs correctement.';
+            return;
+        }
+
+        formMessage.style.color = '#94a3b8';
+        formMessage.textContent = 'Enregistrement...';
+
+        await enregistrerOperationVocal(client, montant, type);
+
+        formMessage.style.color = '#27ae60';
+        formMessage.textContent = `✅ ${client} — ${montant.toLocaleString('fr-FR')} FCFA enregistré.`;
+        operationForm.reset();
+        setTimeout(() => { formMessage.textContent = ''; }, 3000);
+    });
+}
